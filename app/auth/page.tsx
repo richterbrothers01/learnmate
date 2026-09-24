@@ -801,6 +801,7 @@ export default function AuthPage() {
           
             <input
               type="checkbox"
+              className="theme-switch__checkbox"
               checked={darkMode}
               onChange={(e) => {
                 const value = e.target.checked;

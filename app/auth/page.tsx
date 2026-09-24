@@ -1,26 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 
 type Mode = "signup" | "signin";
+type ToastType = "success" | "error";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<Mode>("signup");
-
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-
   const [darkMode, setDarkMode] = useState(false);
 
+  const [toast, setToast] = useState<{
+    title: string;
+    text: string;
+    type: ToastType;
+  } | null>(null);
+
+  const toastTimer = useRef<number | null>(null);
   const supabase = createClient();
 
   const titles = {
@@ -51,9 +54,107 @@ export default function AuthPage() {
     return () => window.clearInterval(timer);
   }, [mode]);
 
+  useEffect(() => {
+    const resetLoading = () => {
+      setLoading(false);
+    };
+
+    window.addEventListener("pageshow", resetLoading);
+    window.addEventListener("focus", resetLoading);
+
+    return () => {
+      window.removeEventListener("pageshow", resetLoading);
+      window.removeEventListener("focus", resetLoading);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current !== null) {
+        window.clearTimeout(toastTimer.current);
+      }
+    };
+  }, []);
+
+  /*
+   * Google OAuth returns to:
+   * /auth?google=success
+   *
+   * Show the success toast for 3 seconds,
+   * then redirect to the dashboard.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get("google") !== "success") {
+      return;
+    }
+
+    window.history.replaceState({}, "", "/auth");
+
+    showToast(
+      "Google sign in successful",
+      "You have successfully signed in with Google.",
+      "success"
+    );
+
+    const redirectTimer = window.setTimeout(() => {
+      window.location.href = "/dashboard";
+    }, 3000);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, []);
+
+  function showToast(
+    title: string,
+    text: string,
+    type: ToastType = "success"
+  ) {
+    if (toastTimer.current !== null) {
+      window.clearTimeout(toastTimer.current);
+    }
+
+    setToast({
+      title,
+      text,
+      type,
+    });
+
+    toastTimer.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimer.current = null;
+    }, 3000);
+  }
+
+  function isValidName(value: string) {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return false;
+    }
+
+    if (trimmed.length < 3 || trimmed.length > 30) {
+      return false;
+    }
+
+    // Letters and spaces only.
+    return /^[A-Za-z ]+$/.test(trimmed);
+  }
+
+  function isValidEmail(value: string) {
+    const trimmed = value.trim();
+
+    // Requires a normal email structure ending in .com.
+    return /^[^\s@]+@[^\s@]+\.com$/i.test(trimmed);
+  }
+
   function getPasswordStrength(value: string) {
     if (!value) {
-      return { level: 0, label: "", hint: "" };
+      return {
+        level: 0,
+        label: "",
+        hint: "",
+      };
     }
 
     let score = 0;
@@ -90,143 +191,413 @@ export default function AuthPage() {
   const strength = getPasswordStrength(password);
 
   async function signUp() {
-    setMessage("");
+    if (loading) return;
 
-    if (!name.trim()) {
-      setMessage("Please enter your name.");
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedName) {
+      showToast(
+        "Name required",
+        "Please enter your name.",
+        "error"
+      );
       return;
     }
 
-    if (!email.trim()) {
-      setMessage("Please enter your email.");
+    if (trimmedName.length < 3) {
+      showToast(
+        "Name too short",
+        "Your name must be at least 3 characters.",
+        "error"
+      );
+      return;
+    }
+
+    if (trimmedName.length > 30) {
+      showToast(
+        "Name too long",
+        "Your name cannot exceed 30 characters.",
+        "error"
+      );
+      return;
+    }
+
+    if (!isValidName(trimmedName)) {
+      showToast(
+        "Invalid name",
+        "Name can only contain letters and spaces.",
+        "error"
+      );
+      return;
+    }
+
+    if (!trimmedEmail) {
+      showToast(
+        "Email required",
+        "Please enter your email.",
+        "error"
+      );
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      showToast(
+        "Invalid email",
+        "Please enter a valid .com email address.",
+        "error"
+      );
       return;
     }
 
     if (!password) {
-      setMessage("Please enter a password.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setMessage("Passwords do not match.");
+      showToast(
+        "Password required",
+        "Please enter a password.",
+        "error"
+      );
       return;
     }
 
     if (password.length < 6) {
-      setMessage("Password must be at least 6 characters.");
+      showToast(
+        "Password too short",
+        "Password must be at least 6 characters.",
+        "error"
+      );
+      return;
+    }
+
+    if (password.length > 20) {
+      showToast(
+        "Password too long",
+        "Password cannot exceed 20 characters.",
+        "error"
+      );
+      return;
+    }
+
+    if (!confirmPassword) {
+      showToast(
+        "Confirm your password",
+        "Please repeat your password.",
+        "error"
+      );
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      showToast(
+        "Passwords don't match",
+        "Please make sure both passwords are the same.",
+        "error"
+      );
       return;
     }
 
     setLoading(true);
-    setMessage("Creating your account...");
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: name.trim(),
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: {
+          data: {
+            full_name: trimmedName,
+          },
         },
-      },
-    });
+      });
 
-    setLoading(false);
+      if (error) {
+        const errorMessage = error.message.toLowerCase();
 
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
+        if (
+          errorMessage.includes("already registered") ||
+          errorMessage.includes("already exists") ||
+          errorMessage.includes("user already") ||
+          errorMessage.includes("already been registered")
+        ) {
+          showToast(
+            "Email already exists",
+            "An account with this email already exists.",
+            "error"
+          );
+          return;
+        }
 
-    if (data.user) {
-      setMessage("Account created! Check your email to verify it.");
+        showToast(
+          "Unable to create account",
+          error.message,
+          "error"
+        );
+        return;
+      }
+
+      if (!data.user) {
+        showToast(
+          "Unable to create account",
+          "Something went wrong while creating your account.",
+          "error"
+        );
+        return;
+      }
+
+      // Supabase may return a user with no identities
+      // when the email already belongs to an account.
+      if (
+        data.user.identities &&
+        data.user.identities.length === 0
+      ) {
+        showToast(
+          "Email already exists",
+          "An account with this email already exists.",
+          "error"
+        );
+        return;
+      }
+
+      showToast(
+        "Account created",
+        "Check your email to verify your account.",
+        "success"
+      );
+    } catch {
+      showToast(
+        "Unable to create account",
+        "Something went wrong. Please try again.",
+        "error"
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
   async function signIn() {
-    setMessage("");
+    if (loading) return;
 
-    if (!email.trim()) {
-      setMessage("Please enter your email.");
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      showToast(
+        "Email required",
+        "Please enter your email.",
+        "error"
+      );
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      showToast(
+        "Invalid email",
+        "Please enter a valid .com email address.",
+        "error"
+      );
       return;
     }
 
     if (!password) {
-      setMessage("Please enter your password.");
+      showToast(
+        "Password required",
+        "Please enter your password.",
+        "error"
+      );
+      return;
+    }
+
+    if (password.length > 20) {
+      showToast(
+        "Password too long",
+        "Password cannot exceed 20 characters.",
+        "error"
+      );
       return;
     }
 
     setLoading(true);
-    setMessage("Logging you in...");
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { error } =
+        await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        });
 
-    setLoading(false);
+      if (error) {
+        showToast(
+          "Sign in failed",
+          error.message,
+          "error"
+        );
+        return;
+      }
 
-    if (error) {
-      setMessage(error.message);
-      return;
+      showToast(
+        "Welcome back",
+        "You have successfully signed in.",
+        "success"
+      );
+
+      window.setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 3000);
+    } catch {
+      showToast(
+        "Sign in failed",
+        "Something went wrong. Please try again.",
+        "error"
+      );
+    } finally {
+      setLoading(false);
     }
-
-    window.location.href = "/dashboard";
   }
 
   async function signInWithGoogle() {
-    setMessage("");
+    if (loading) return;
+
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    try {
+      const nextPath = encodeURIComponent(
+        "/auth?google=success"
+      );
 
-    if (error) {
+      const redirectTo =
+        `${window.location.origin}/auth/callback?next=${nextPath}`;
+
+      const { data, error } =
+        await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo,
+          },
+        });
+
+      if (error) {
+        showToast(
+          "Google sign in failed",
+          error.message,
+          "error"
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (!data.url) {
+        showToast(
+          "Google sign in failed",
+          "Unable to start Google sign-in.",
+          "error"
+        );
+        setLoading(false);
+        return;
+      }
+
+      window.location.assign(data.url);
+    } catch {
       setLoading(false);
-      setMessage(error.message);
+
+      showToast(
+        "Google sign in failed",
+        "Something went wrong. Please try again.",
+        "error"
+      );
     }
   }
 
   async function forgotPassword() {
-    setMessage("");
+    if (loading) return;
 
-    if (!email.trim()) {
-      setMessage("Enter your email first.");
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      showToast(
+        "Email required",
+        "Please enter your email first.",
+        "error"
+      );
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      showToast(
+        "Invalid email",
+        "Please enter a valid .com email address.",
+        "error"
+      );
       return;
     }
 
     setLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`,
-    });
+    try {
+      const { error } =
+        await supabase.auth.resetPasswordForEmail(
+          trimmedEmail,
+          {
+            redirectTo: `${window.location.origin}/auth`,
+          }
+        );
 
-    setLoading(false);
+      if (error) {
+        showToast(
+          "Unable to send reset link",
+          error.message,
+          "error"
+        );
+        return;
+      }
 
-    if (error) {
-      setMessage(error.message);
-      return;
+      showToast(
+        "Reset link sent",
+        "Check your email to reset your password.",
+        "success"
+      );
+    } catch {
+      showToast(
+        "Unable to send reset link",
+        "Something went wrong. Please try again.",
+        "error"
+      );
+    } finally {
+      setLoading(false);
     }
-
-    setMessage("Password reset link sent. Check your email.");
   }
 
   function switchMode(newMode: Mode) {
     setMode(newMode);
-    setMessage("");
     setPassword("");
     setConfirmPassword("");
     setShowPassword(false);
     setShowConfirmPassword(false);
+    setLoading(false);
+    setToast(null);
   }
 
   return (
-    <main className={`auth-page ${darkMode ? "dark-mode" : ""}`}>
+    <main
+      className={`auth-page ${darkMode ? "dark-mode" : ""}`}
+    >
+      {toast && (
+        <div
+          className={`success-toast ${toast.type === "error" ? "error-toast" : ""
+            }`}
+        >
+          <div className="success-toast-icon">
+            {toast.type === "success" ? "✓" : "×"}
+          </div>
+
+          <div className="success-toast-content">
+            <strong>{toast.title}</strong>
+            <span>{toast.text}</span>
+          </div>
+        </div>
+      )}
+
       {/* DARK MODE SWITCH */}
-      <label className="theme-switch" aria-label="Toggle dark mode">
+      <label
+        className="theme-switch"
+        aria-label="Toggle dark mode"
+      >
         <input
           type="checkbox"
           className="theme-switch__checkbox"
@@ -246,7 +617,7 @@ export default function AuthPage() {
               <path
                 fillRule="evenodd"
                 clipRule="evenodd"
-                d="M135.831 3.00688C135.055 3.85027 134.111 4.29946 133 4.35447C134.111 4.40947 135.055 4.85867 135.831 5.71123C136.607 6.55462 136.996 7.56303 136.996 8.72727C136.996 7.95722 137.172 7.25134 137.525 6.59129C137.886 5.93124 138.372 5.39954 138.98 5.00535C139.598 4.60199 140.268 4.39114 141 4.35447C139.88 4.2903 138.936 3.85027 138.16 3.00688C137.384 2.16348 136.996 1.16425 136.996 0C136.996 1.16425 136.607 2.16348 135.831 3.00688ZM31 23.3545C32.1114 23.2995 33.0551 22.8503 33.8313 22.0069C34.6075 21.1635 34.9956 20.1642 34.9956 19C34.9956 20.1642 35.3837 21.1635 36.1599 22.0069C36.9361 22.8503 37.8798 23.2903 39 23.3545C38.2679 23.3911 37.5976 23.602 36.9802 24.0053C36.3716 24.3995 35.8864 24.9312 35.5248 25.5913C35.172 26.2513 34.9956 26.9572 34.9956 27.7273C34.9956 26.563 34.6075 25.5546 33.8313 24.7112C33.0551 23.8587 32.1114 23.4095 31 23.3545ZM0 36.3545C1.11136 36.2995 2.05513 35.8503 2.83131 35.0069C3.6075 34.1635 3.99559 33.1642 3.99559 32C3.99559 33.1642 4.38368 34.1635 5.15987 35.0069C5.93605 35.8503 6.87982 36.2903 8 36.3545C7.26792 36.3911 6.59757 36.602 5.98015 37.0053C5.37155 37.3995 4.88644 37.9312 4.52481 38.5913C4.172 39.2513 3.99559 39.9572 3.99559 40.7273C3.99559 39.563 3.6075 38.5546 2.83131 37.7112C2.05513 36.8587 1.11136 36.4095 0 36.3545ZM56.8313 24.0069C56.0551 24.8503 55.1114 25.2995 54 25.3545C55.1114 25.4095 56.0551 25.8587 56.8313 26.7112C57.6075 27.5546 57.9956 28.563 57.9956 29.7273C57.9956 28.9572 58.172 28.2513 58.5248 27.5913C58.8864 26.9312 59.3716 26.3995 59.9802 26.0053C60.5976 25.602 61.2679 25.3911 62 25.3545C60.8798 25.2903 59.9361 24.8503 59.1599 24.0069C58.3837 23.1635 57.9956 22.1642 57.9956 21C57.9956 22.1642 57.6075 23.1635 56.8313 24.0069ZM81 25.3545C82.1114 25.2995 83.0551 24.8503 83.8313 24.0069C84.6075 23.1635 84.9956 22.1642 84.9956 21C84.9956 22.1642 85.3837 23.1635 86.1599 24.0069C86.9361 24.8503 87.8798 25.2903 89 25.3545C88.2679 25.3911 87.5976 25.602 86.9802 26.0053C86.3716 26.3995 85.8864 26.9312 85.5248 27.5913C85.172 28.2513 84.9956 28.9572 84.9956 29.7273C84.9956 28.563 84.6075 27.5546 83.8313 26.7112C83.0551 25.8587 82.1114 25.4095 81 25.3545ZM136 36.3545C137.111 36.2995 138.055 35.8503 138.831 35.0069C139.607 34.1635 139.996 33.1642 139.996 32C139.996 33.1642 140.384 34.1635 141.16 35.0069C141.936 35.8503 142.88 36.2903 144 36.3545C143.268 36.3911 142.598 36.602 141.98 37.0053C141.372 37.3995 140.886 37.9312 140.525 38.5913C140.172 39.2513 139.996 39.9572 139.996 40.7273C139.996 39.563 139.607 38.5546 138.831 37.7112C138.055 36.8587 137.111 36.4095 136 36.3545ZM101.831 49.0069C101.055 49.8503 100.111 50.2995 99 50.3545C100.111 50.4095 101.055 50.8587 101.831 51.7112C102.607 52.5546 102.996 53.563 102.996 54.7273C102.996 53.9572 103.172 53.2513 103.525 52.5913C103.886 51.9312 104.372 51.3995 104.98 51.0053C105.598 50.602 106.268 50.3911 107 50.3545C105.88 50.2903 104.936 49.8503 104.16 49.0069C103.384 48.1635 102.996 47.1642 102.996 46C102.996 47.1642 102.607 48.1635 101.831 49.0069Z"
+                d="M135.831 3.00688C135.055 3.85027 134.111 4.29946 133 4.35447C134.111 4.40947 135.055 4.85867 135.831 5.71123C136.607 6.55462 136.996 7.56303 136.996 8.72727C136.996 7.95722 137.172 7.25134 137.525 6.59129C137.886 5.93124 138.372 5.39954 138.98 5.00535C139.598 4.60199 140.268 4.39114 141 4.35447C139.88 4.2903 138.936 3.85027 138.16 3.00688C137.384 2.16348 136.996 1.16425 136.996 0C136.996 1.16425 136.607 2.16348 135.831 3.00688ZM31 23.3545C32.1114 23.2995 33.0551 22.8503 33.8313 22.0069C34.6075 21.1635 34.9956 20.1642 34.9956 19C34.9956 20.1642 35.3837 21.1635 36.1599 22.0069C36.9361 22.8503 37.8798 23.2903 39 23.3545C38.2679 23.3911 37.5976 23.602 36.9802 24.0053C36.3716 24.3995 35.8864 24.9312 35.5248 25.5913C35.172 26.2513 34.9956 26.9572 34.9956 27.7273C34.9956 26.563 34.6075 25.5546 33.8313 24.7112C33.0551 23.8587 32.1114 23.4095 31 23.3545ZM0 36.3545C1.11136 36.2995 2.05513 35.8503 2.83131 35.0069C3.6075 34.1635 3.99559 33.1642 3.99559 32C3.99559 33.1642 4.38368 34.1635 5.15987 35.0069C5.93605 35.8503 6.87982 36.2903 8 36.3545C7.26792 36.3911 6.59757 36.602 5.98015 37.0053C5.37155 37.3995 4.88644 37.9312 4.52481 38.5913C4.172 39.2513 3.99559 39.9572 3.99559 40.7273C3.99559 39.563 3.6075 38.5546 2.83131 37.7112C2.05513 36.8587 1.11136 36.4095 0 36.3545ZM56.8313 24.0069C56.0551 24.8503 55.1111 25.2995 54 25.3545C55.1111 25.4095 56.0551 25.8587 56.8313 26.7112C57.6075 27.5546 57.9956 28.563 57.9956 29.7273C57.9956 28.9572 57.6075 28.2513 58.5248 27.5913C58.8864 26.9312 59.3716 26.3995 59.9802 26.0053C60.5976 25.602 61.2679 25.3911 62 25.3545C60.8798 25.2903 59.9361 24.8503 59.1599 24.0069C58.3837 23.1635 57.9956 22.1642 57.9956 21C57.9956 22.1642 57.6076 23.1635 56.8313 24.0069ZM81 25.3545C82.1114 25.2995 83.0551 24.8503 83.8313 24.0069C84.6075 23.1635 84.9956 22.1642 84.9956 21C84.9956 22.1642 85.3837 23.1635 86.1599 24.0069C86.9361 24.8503 87.8798 25.2903 89 25.3545C88.2679 25.3911 87.5976 25.602 86.9802 26.0053C86.3716 26.3995 85.8864 26.9312 85.5248 27.5913C85.172 28.2513 84.9956 28.9572 84.9956 29.7273C84.9956 28.563 84.6076 27.5546 83.8313 26.7112C83.0551 25.8587 82.1114 25.4095 81 25.3545ZM136 36.3545C137.111 36.2995 138.055 35.8503 138.831 35.0069C139.607 34.1635 139.996 33.1642 139.996 32C139.996 33.1642 140.384 34.1635 141.16 35.0069C141.936 35.8503 142.88 36.2903 144 36.3545C143.268 36.3911 142.598 36.602 141.98 37.0053C141.372 37.3995 140.886 37.9312 140.525 38.5913C140.172 39.2513 139.996 39.9572 139.996 40.7273C139.996 39.563 139.607 38.5546 138.831 37.7112C138.055 36.8587 137.111 36.4095 136 36.3545ZM101.831 49.0069C101.055 49.8503 100.111 50.2995 99 50.3545C100.111 50.4095 101.055 50.8587 101.831 51.7112C102.607 52.5546 102.996 53.563 102.996 54.7273C102.996 53.9572 103.172 53.2513 103.525 52.5913C103.886 51.9312 104.372 51.3995 104.98 51.0053C105.598 50.602 106.268 50.3911 107 50.3545C105.88 50.2903 104.936 49.8503 104.16 49.0069C103.384 48.1635 102.996 47.1642 102.996 46C102.996 47.1642 102.607 48.1635 101.831 49.0069Z"
                 fill="currentColor"
               />
             </svg>
@@ -287,11 +658,13 @@ export default function AuthPage() {
           </div>
 
           <div className="brand-copy">
-            <h2>Turn studying into an interactive journey.</h2>
+            <h2>
+              Turn studying into an interactive journey.
+            </h2>
 
             <p>
-              Learn, practice and understand concepts with a learning
-              experience built around you.
+              Learn, practice and understand concepts with a
+              learning experience built around you.
             </p>
           </div>
 
@@ -324,12 +697,6 @@ export default function AuthPage() {
               src="/onlylogo.png"
               alt="LearnMate"
               className="mobile-only-logo"
-            />
-
-            <img
-              src="/textlogo.png"
-              alt="LearnMate"
-              className="mobile-text-logo"
             />
           </div>
 
@@ -373,6 +740,7 @@ export default function AuthPage() {
                     type="text"
                     placeholder="Your name"
                     value={name}
+                    maxLength={30}
                     onChange={(e) => setName(e.target.value)}
                     autoComplete="name"
                   />
@@ -412,16 +780,21 @@ export default function AuthPage() {
                       : "Enter your password"
                   }
                   value={password}
+                  maxLength={20}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete={
-                    mode === "signup" ? "new-password" : "current-password"
+                    mode === "signup"
+                      ? "new-password"
+                      : "current-password"
                   }
                 />
 
                 <button
                   type="button"
                   className="show-button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() =>
+                    setShowPassword(!showPassword)
+                  }
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
@@ -433,7 +806,9 @@ export default function AuthPage() {
                     {[1, 2, 3].map((bar) => (
                       <span
                         key={bar}
-                        className={bar <= strength.level ? "filled" : ""}
+                        className={
+                          bar <= strength.level ? "filled" : ""
+                        }
                       />
                     ))}
                   </div>
@@ -448,17 +823,26 @@ export default function AuthPage() {
 
             {mode === "signup" && (
               <div className="field">
-                <label htmlFor="confirm-password">Confirm Password</label>
+                <label htmlFor="confirm-password">
+                  Confirm Password
+                </label>
 
                 <div className="input-wrap">
                   <span className="input-icon">⌕</span>
 
                   <input
                     id="confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
+                    type={
+                      showConfirmPassword
+                        ? "text"
+                        : "password"
+                    }
                     placeholder="Repeat your password"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    maxLength={20}
+                    onChange={(e) =>
+                      setConfirmPassword(e.target.value)
+                    }
                     autoComplete="new-password"
                   />
 
@@ -466,7 +850,9 @@ export default function AuthPage() {
                     type="button"
                     className="show-button"
                     onClick={() =>
-                      setShowConfirmPassword(!showConfirmPassword)
+                      setShowConfirmPassword(
+                        !showConfirmPassword
+                      )
                     }
                   >
                     {showConfirmPassword ? "Hide" : "Show"}
@@ -494,6 +880,7 @@ export default function AuthPage() {
                 type="button"
                 className="forgot-button"
                 onClick={forgotPassword}
+                disabled={loading}
               >
                 Forgot password?
               </button>
@@ -503,7 +890,9 @@ export default function AuthPage() {
               type="button"
               className="primary-button"
               disabled={loading}
-              onClick={mode === "signup" ? signUp : signIn}
+              onClick={
+                mode === "signup" ? signUp : signIn
+              }
             >
               {loading
                 ? "Please wait..."
@@ -531,18 +920,19 @@ export default function AuthPage() {
 
               <span>Continue with Google</span>
             </button>
-
-            {message && <p className="message">{message}</p>}
           </div>
 
           <div className="bottom-text">
             {mode === "signup"
               ? "Already have an account?"
               : "Don't have an account?"}{" "}
+
             <button
               type="button"
               onClick={() =>
-                switchMode(mode === "signup" ? "signin" : "signup")
+                switchMode(
+                  mode === "signup" ? "signin" : "signup"
+                )
               }
             >
               {mode === "signup" ? "Sign In" : "Sign Up"}
@@ -580,8 +970,8 @@ export default function AuthPage() {
           background: #7a2f00;
           color: #2a1a0e;
           font-family:
-            Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-            "Segoe UI", sans-serif;
+            Inter, ui-sans-serif, system-ui, -apple-system,
+            BlinkMacSystemFont, "Segoe UI", sans-serif;
           overflow: hidden;
           position: relative;
           isolation: isolate;
@@ -641,7 +1031,8 @@ export default function AuthPage() {
           overflow: hidden;
           border: 1px solid rgba(255, 255, 255, 0.15);
           box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
-          animation: enter 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+          animation:
+            enter 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
           transition:
             background 0.65s ease,
             box-shadow 0.65s ease,
@@ -663,6 +1054,96 @@ export default function AuthPage() {
           to {
             opacity: 1;
             transform: translateY(0) scale(1);
+          }
+        }
+
+        /* =========================
+           TOAST
+        ========================== */
+
+        .success-toast {
+          position: fixed;
+          top: 24px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 9999;
+          width: min(430px, calc(100vw - 32px));
+          min-height: 76px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 14px 18px;
+          background: #fdf8eb;
+          border: 1px solid rgba(122, 47, 0, 0.14);
+          border-radius: 14px;
+          box-shadow:
+            0 18px 50px rgba(42, 26, 14, 0.22);
+          animation:
+            toast-in 0.45s cubic-bezier(0.22, 1, 0.36, 1)
+            forwards;
+        }
+
+        .success-toast-icon {
+          width: 40px;
+          height: 40px;
+          flex: 0 0 40px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: #35b889;
+          color: white;
+          font-size: 21px;
+          font-weight: 700;
+        }
+
+        .error-toast .success-toast-icon {
+          background: #c94b3c;
+          font-size: 26px;
+          line-height: 1;
+        }
+
+        .success-toast-content {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .success-toast-content strong {
+          color: #2a1a0e;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .success-toast-content span {
+          color: #8a7059;
+          font-size: 12.5px;
+          line-height: 1.4;
+        }
+
+        .dark-mode .success-toast {
+          background: #292a2f;
+          border-color: #44454c;
+          box-shadow:
+            0 18px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .dark-mode .success-toast-content strong {
+          color: #f3f3f4;
+        }
+
+        .dark-mode .success-toast-content span {
+          color: #aaaab0;
+        }
+
+        @keyframes toast-in {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -35px);
+          }
+
+          to {
+            opacity: 1;
+            transform: translate(-50%, 0);
           }
         }
 
@@ -711,7 +1192,8 @@ export default function AuthPage() {
 
         .brand-copy h2 {
           margin: 0 0 12px;
-          font-family: Georgia, "Times New Roman", serif;
+          font-family:
+            Georgia, "Times New Roman", serif;
           font-size: 30px;
           line-height: 1.15;
           font-weight: 600;
@@ -828,7 +1310,8 @@ export default function AuthPage() {
         .heading h1 {
           margin: 0 0 7px;
           min-height: 72px;
-          font-family: Georgia, "Times New Roman", serif;
+          font-family:
+            Georgia, "Times New Roman", serif;
           font-size: 30px;
           line-height: 1.2;
           letter-spacing: -0.7px;
@@ -927,7 +1410,8 @@ export default function AuthPage() {
 
         .input-wrap input:focus {
           border-color: #7a2f00;
-          box-shadow: 0 0 0 4px rgba(122, 47, 0, 0.12);
+          box-shadow:
+            0 0 0 4px rgba(122, 47, 0, 0.12);
         }
 
         .input-wrap input::placeholder {
@@ -1057,6 +1541,11 @@ export default function AuthPage() {
           transition: color 0.3s ease;
         }
 
+        .forgot-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
         .dark-mode .forgot-button {
           color: #d98b55;
         }
@@ -1081,7 +1570,8 @@ export default function AuthPage() {
         .primary-button:hover:not(:disabled) {
           background: #642600;
           transform: translateY(-1px);
-          box-shadow: 0 8px 20px rgba(92, 34, 3, 0.25);
+          box-shadow:
+            0 8px 20px rgba(92, 34, 3, 0.25);
         }
 
         .primary-button:active:not(:disabled) {
@@ -1167,19 +1657,6 @@ export default function AuthPage() {
           flex: 0 0 19px;
         }
 
-        .message {
-          margin: 0;
-          text-align: center;
-          color: #8a7059;
-          font-size: 12px;
-          line-height: 1.5;
-          transition: color 0.55s ease;
-        }
-
-        .dark-mode .message {
-          color: #a9a9af;
-        }
-
         .bottom-text {
           margin: 20px 0 0;
           text-align: center;
@@ -1216,27 +1693,28 @@ export default function AuthPage() {
           --container-width: 5.625em;
           --container-height: 2.5em;
           --container-radius: 6.25em;
-
           --container-light-bg: #3d7eae;
           --container-night-bg: #1d1f2c;
-
           --circle-container-diameter: 3.375em;
           --sun-moon-diameter: 2.125em;
-
           --sun-bg: #ecca2f;
           --moon-bg: #c4c9d1;
           --spot-color: #959db1;
-
           --circle-container-offset: calc(
-            ((var(--circle-container-diameter) - var(--container-height)) / 2) * -1
+            (
+                (
+                  var(--circle-container-diameter) -
+                  var(--container-height)
+                ) / 2
+              ) * -1
           );
-
           --stars-color: #fff;
           --clouds-color: #f3fdff;
           --back-clouds-color: #aacadf;
-
-          --transition: 0.5s cubic-bezier(0, -0.02, 0.4, 1.25);
-          --circle-transition: 0.3s cubic-bezier(0, -0.02, 0.35, 1.17);
+          --transition:
+            0.5s cubic-bezier(0, -0.02, 0.4, 1.25);
+          --circle-transition:
+            0.3s cubic-bezier(0, -0.02, 0.35, 1.17);
 
           position: fixed;
           top: 18px;
@@ -1265,7 +1743,8 @@ export default function AuthPage() {
           cursor: pointer;
           box-shadow:
             0em -0.062em 0.062em rgba(0, 0, 0, 0.25),
-            0em 0.062em 0.125em rgba(255, 255, 255, 0.94);
+            0em 0.062em 0.125em
+              rgba(255, 255, 255, 0.94);
           transition: var(--transition);
           position: relative;
         }
@@ -1276,8 +1755,10 @@ export default function AuthPage() {
           z-index: 1;
           inset: 0;
           box-shadow:
-            0em 0.05em 0.187em rgba(0, 0, 0, 0.25) inset,
-            0em 0.05em 0.187em rgba(0, 0, 0, 0.25) inset;
+            0em 0.05em 0.187em
+              rgba(0, 0, 0, 0.25) inset,
+            0em 0.05em 0.187em
+              rgba(0, 0, 0, 0.25) inset;
           border-radius: var(--container-radius);
         }
 
@@ -1312,11 +1793,18 @@ export default function AuthPage() {
           border-radius: var(--container-radius);
           background-color: var(--sun-bg);
           box-shadow:
-            0.062em 0.062em 0.062em 0em rgba(254, 255, 239, 0.61) inset,
+            0.062em 0.062em 0.062em 0em
+              rgba(254, 255, 239, 0.61) inset,
             0em -0.062em 0.062em 0em #a1872a inset;
           filter:
-            drop-shadow(0.062em 0.125em 0.125em rgba(0, 0, 0, 0.25))
-            drop-shadow(0em 0.062em 0.125em rgba(0, 0, 0, 0.25));
+            drop-shadow(
+              0.062em 0.125em 0.125em
+                rgba(0, 0, 0, 0.25)
+            )
+            drop-shadow(
+              0em 0.062em 0.125em
+                rgba(0, 0, 0, 0.25)
+            );
           overflow: hidden;
           transition: var(--transition);
         }
@@ -1328,7 +1816,8 @@ export default function AuthPage() {
           background-color: var(--moon-bg);
           border-radius: inherit;
           box-shadow:
-            0.062em 0.062em 0.062em 0em rgba(254, 255, 239, 0.61) inset,
+            0.062em 0.062em 0.062em 0em
+              rgba(254, 255, 239, 0.61) inset,
             0em -0.062em 0.062em 0em #969696 inset;
           transition: var(--transition);
           position: relative;
@@ -1342,7 +1831,9 @@ export default function AuthPage() {
           height: 0.75em;
           border-radius: var(--container-radius);
           background-color: var(--spot-color);
-          box-shadow: 0em 0.0312em 0.062em rgba(0, 0, 0, 0.25) inset;
+          box-shadow:
+            0em 0.0312em 0.062em
+              rgba(0, 0, 0, 0.25) inset;
         }
 
         .theme-switch__spot:nth-of-type(2) {
@@ -1380,9 +1871,11 @@ export default function AuthPage() {
             2.625em 0em var(--back-clouds-color),
             4.5em -0.312em var(--clouds-color),
             3.375em -0.437em var(--back-clouds-color),
-            4.625em -1.75em 0 0.437em var(--clouds-color),
+            4.625em -1.75em 0 0.437em
+              var(--clouds-color),
             4em -0.625em var(--back-clouds-color),
-            4.125em -2.125em 0 0.437em var(--back-clouds-color);
+            4.125em -2.125em 0 0.437em
+              var(--back-clouds-color);
         }
 
         .theme-switch__stars-container {
@@ -1401,7 +1894,8 @@ export default function AuthPage() {
           display: block;
         }
 
-        .theme-switch__checkbox:checked + .theme-switch__container {
+        .theme-switch__checkbox:checked
+          + .theme-switch__container {
           background-color: var(--container-night-bg);
         }
 
@@ -1410,7 +1904,7 @@ export default function AuthPage() {
           .theme-switch__circle-container {
           left: calc(
             100% - var(--circle-container-offset) -
-              var(--circle-container-diameter)
+            var(--circle-container-diameter)
           );
         }
 
@@ -1419,12 +1913,15 @@ export default function AuthPage() {
           .theme-switch__circle-container:hover {
           left: calc(
             100% - var(--circle-container-offset) -
-              var(--circle-container-diameter) - 0.187em
+            var(--circle-container-diameter) -
+            0.187em
           );
         }
 
         .theme-switch__circle-container:hover {
-          left: calc(var(--circle-container-offset) + 0.187em);
+          left: calc(
+            var(--circle-container-offset) + 0.187em
+          );
         }
 
         .theme-switch__checkbox:checked
@@ -1469,25 +1966,15 @@ export default function AuthPage() {
           .mobile-brand {
             display: flex;
             align-items: center;
-            justify-content: flex-start;
-            gap: 10px;
-            margin-bottom: 20px;
-            height: 48px;
+            justify-content: center;
+            margin-bottom: 24px;
+            height: 110px;
           }
 
           .mobile-only-logo {
-            width: 44px;
-            height: 44px;
+            width: 110px;
+            height: 110px;
             object-fit: contain;
-            display: block;
-            flex: 0 0 44px;
-          }
-
-          .mobile-text-logo {
-            width: 125px;
-            height: 44px;
-            object-fit: contain;
-            object-position: left center;
             display: block;
           }
 
@@ -1500,6 +1987,10 @@ export default function AuthPage() {
             top: 14px;
             right: 14px;
             --toggle-size: 16px;
+          }
+
+          .success-toast {
+            top: 16px;
           }
         }
 
@@ -1517,19 +2008,13 @@ export default function AuthPage() {
           }
 
           .mobile-brand {
-            margin-bottom: 18px;
-            height: 44px;
+            margin-bottom: 22px;
+            height: 100px;
           }
 
           .mobile-only-logo {
-            width: 40px;
-            height: 40px;
-            flex-basis: 40px;
-          }
-
-          .mobile-text-logo {
-            width: 115px;
-            height: 40px;
+            width: 100px;
+            height: 100px;
           }
 
           .tabs button {
@@ -1540,6 +2025,11 @@ export default function AuthPage() {
             top: 12px;
             right: 12px;
             --toggle-size: 15px;
+          }
+
+          .success-toast {
+            width: calc(100vw - 24px);
+            top: 12px;
           }
         }
 

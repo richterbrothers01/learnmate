@@ -17,6 +17,18 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("learnmate-theme");
+
+    if (savedTheme === "dark") {
+      setDarkMode(true);
+    } else if (savedTheme === "light") {
+      setDarkMode(false);
+    } else {
+      setDarkMode(window.matchMedia("(prefers-color-scheme: dark)").matches);
+    }
+  }, []);
+
   const [toast, setToast] = useState<{
     title: string;
     text: string;
@@ -784,13 +796,13 @@ export default function AuthPage() {
           >
             <input
               type="checkbox"
-              className="theme-switch__checkbox"
               checked={darkMode}
-              onChange={(e) =>
-                setDarkMode(e.target.checked)
-              }
+              onChange={(e) => {
+                const value = e.target.checked;
+                setDarkMode(value);
+                localStorage.setItem("learnmate-theme", value ? "dark" : "light");
+              }}
             />
-
             <div className="theme-switch__container">
               <div className="theme-switch__clouds" />
 

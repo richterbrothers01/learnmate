@@ -8,7 +8,30 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const checkUser = async () => {
+    const checkBrowser = async () => {
+      /*
+       * FIRST:
+       * Check whether this browser has completed
+       * LearnMate onboarding.
+       */
+      const onboardingCompleted =
+        window.localStorage.getItem(
+          "learnmate_onboarding_completed"
+        );
+
+      /*
+       * New browser / first visit
+       * → Onboarding
+       */
+      if (onboardingCompleted !== "true") {
+        router.replace("/onboarding");
+        return;
+      }
+
+      /*
+       * Onboarding is already completed.
+       * Now check whether the user is logged in.
+       */
       const supabase = createClient();
 
       const {
@@ -16,7 +39,7 @@ export default function HomePage() {
       } = await supabase.auth.getUser();
 
       /*
-       * Already logged in
+       * Logged in
        * → Dashboard
        */
       if (user) {
@@ -25,32 +48,13 @@ export default function HomePage() {
       }
 
       /*
-       * Not logged in.
-       *
-       * Check whether this browser has already completed
-       * LearnMate onboarding.
+       * Onboarding completed but not logged in
+       * → Auth
        */
-      const onboardingCompleted =
-        window.localStorage.getItem(
-          "learnmate_onboarding_completed"
-        );
-
-      if (onboardingCompleted === "true") {
-        /*
-         * Returning user who is currently logged out
-         * → Auth
-         */
-        router.replace("/auth");
-      } else {
-        /*
-         * Completely new visitor
-         * → Onboarding
-         */
-        router.replace("/onboarding");
-      }
+      router.replace("/auth");
     };
 
-    checkUser();
+    checkBrowser();
   }, [router]);
 
   return (

@@ -2132,91 +2132,134 @@ export default function AuthPage() {
         ========================== */
 
         @media (max-width: 900px) {
-          .auth-page {
-            padding: 16px;
-            overflow-y: auto;
-            overflow-x: hidden;
-            align-items: center;
-          }
+  .auth-page {
+    padding: 16px;
+    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+  }
 
-          .auth-shell {
-            grid-template-columns: 1fr;
-            max-width: 520px;
-            width: 100%;
-          }
+  .auth-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+    max-width: 520px;
+    width: 100%;
+    height: calc(100dvh - 32px);
+    max-height: calc(100dvh - 32px);
+    min-height: 0;
+  }
 
-          .brand-side {
-            display: none;
-          }
+  .brand-side {
+    display: none;
+  }
 
-          .form-side {
-            padding: 28px 22px 26px;
-            max-height: calc(100dvh - 32px);
-            overflow-y: auto;
-            overflow-x: hidden;
-            scrollbar-width: thin;
-            scrollbar-color: #c9a987 transparent;
-            position: relative;
-          }
+  .form-side {
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    padding: 28px 22px 26px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #c9a987 transparent;
+  }
 
-          .form-side::-webkit-scrollbar {
-            width: 5px;
-          }
+  .form-side::-webkit-scrollbar {
+    width: 5px;
+  }
 
-          .form-side::-webkit-scrollbar-track {
-            background: transparent;
-          }
+  .form-side::-webkit-scrollbar-track {
+    background: transparent;
+  }
 
-          .form-side::-webkit-scrollbar-thumb {
-            background: #c9a987;
-            border-radius: 999px;
-          }
+  .form-side::-webkit-scrollbar-thumb {
+    background: #c9a987;
+    border-radius: 999px;
+  }
 
-          .dark-mode .form-side {
-            scrollbar-color: #55565d transparent;
-          }
+  .dark-mode .form-side {
+    scrollbar-color: #55565d transparent;
+  }
 
-          .dark-mode .form-side::-webkit-scrollbar-thumb {
-            background: #55565d;
-          }
+  .dark-mode .form-side::-webkit-scrollbar-thumb {
+    background: #55565d;
+  }
 
-          .mobile-brand {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 24px;
-            height: 110px;
-          }
+  .mobile-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+    height: 110px;
+  }
 
-          .mobile-only-logo {
-            width: 110px;
-            height: 110px;
-            object-fit: contain;
-            display: block;
-          }
+  .mobile-only-logo {
+    width: 110px;
+    height: 110px;
+    object-fit: contain;
+    display: block;
+  }
 
-          .heading h1 {
-            font-size: 26px;
-            min-height: 62px;
-          }
+  .heading h1 {
+    font-size: 26px;
+    min-height: 62px;
+  }
 
-          /*
-             On phone the switch is now INSIDE
-             the curved form cuboid.
-          */
+  .theme-switch {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    z-index: 30;
+    --toggle-size: 16px;
+  }
 
-          .theme-switch {
-            position: absolute;
-            top: 18px;
-            right: 18px;
-            z-index: 30;
-            --toggle-size: 16px;
-          }
+  .success-toast {
+    top: 16px;
+  }
+}
 
-          .success-toast {
-            top: 16px;
-          }
-        }
+@media (max-width: 520px) {
+  .auth-page {
+    padding: 12px;
+  }
+
+  .auth-shell {
+    border-radius: 18px;
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .form-side {
+    height: 100%;
+    max-height: 100%;
+    padding: 22px 18px 24px;
+  }
+
+  .mobile-brand {
+    margin-bottom: 22px;
+    height: 100px;
+  }
+
+  .mobile-only-logo {
+    width: 100px;
+    height: 100px;
+  }
+
+  .tabs button {
+    padding: 8px 15px;
+  }
+
+  .theme-switch {
+    top: 14px;
+    right: 14px;
+    --toggle-size: 15px;
+  }
+
+  .success-toast {
+    width: calc(100vw - 24px);
+    top: 12px;
+  }
+}
 
         @media (max-width: 520px) {
           .auth-page {

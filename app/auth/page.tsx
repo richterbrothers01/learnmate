@@ -795,9 +795,10 @@ export default function AuthPage() {
           {/* DARK MODE SWITCH */}
 
           <label
-            className="theme-switch"
+            className={`theme-switch ${darkMode ? "dark" : ""}`}
             aria-label="Toggle dark mode"
           >
+          
             <input
               type="checkbox"
               checked={darkMode}

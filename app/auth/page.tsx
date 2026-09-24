@@ -25,7 +25,11 @@ export default function AuthPage() {
     } else if (savedTheme === "light") {
       setDarkMode(false);
     } else {
-      setDarkMode(window.matchMedia("(prefers-color-scheme: dark)").matches);
+      const systemDark = window.matchMedia(
+        "(prefers-color-scheme: dark)"
+      ).matches;
+
+      setDarkMode(systemDark);
     }
   }, []);
 

@@ -32,7 +32,35 @@ export async function proxy(request: NextRequest) {
         }
     );
 
-    await supabase.auth.getUser();
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+
+    const pathname = request.nextUrl.pathname;
+
+    // ------------------------------------------------------------
+    // ALREADY LOGGED IN → /dashboard
+    // ------------------------------------------------------------
+
+    if (user && pathname === "/auth") {
+        const dashboardUrl = request.nextUrl.clone();
+        dashboardUrl.pathname = "/dashboard";
+        dashboardUrl.search = "";
+
+        return NextResponse.redirect(dashboardUrl);
+    }
+
+    // ------------------------------------------------------------
+    // NOT LOGGED IN → /auth
+    // ------------------------------------------------------------
+
+    if (!user && pathname.startsWith("/dashboard")) {
+        const authUrl = request.nextUrl.clone();
+        authUrl.pathname = "/auth";
+        authUrl.search = "";
+
+        return NextResponse.redirect(authUrl);
+    }
 
     return response;
 }

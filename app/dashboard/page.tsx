@@ -34,6 +34,8 @@ type StreakMeta = {
   gif: string | null;
 };
 
+type SettingsView = "main" | "name" | "email";
+
 // ============================================================
 // SUPABASE
 // ============================================================
@@ -130,7 +132,10 @@ const RING_C = 201.06;
 // GREETING
 // ============================================================
 
-function greetingForHour(hour: number, name: string): string {
+function greetingForHour(
+  hour: number,
+  name: string,
+): string {
   const safeName = name || "Student";
 
   if (hour >= 0 && hour < 4) {
@@ -215,7 +220,11 @@ function ProgressRing({
       .matchMedia("(prefers-reduced-motion: reduce)")
       .matches;
 
-    if (reduced || !animate || value === 0) {
+    if (
+      reduced ||
+      !animate ||
+      value === 0
+    ) {
       node.style.strokeDashoffset = String(
         RING_C * (1 - value / 100),
       );
@@ -231,8 +240,14 @@ function ProgressRing({
     const dur = 1400;
 
     const tick = (t: number) => {
-      const k = Math.min(1, (t - t0) / dur);
-      const eased = 1 - Math.pow(1 - k, 3);
+      const k = Math.min(
+        1,
+        (t - t0) / dur,
+      );
+
+      const eased =
+        1 - Math.pow(1 - k, 3);
+
       const v = value * eased;
 
       node.style.strokeDashoffset = String(
@@ -244,9 +259,10 @@ function ProgressRing({
       if (k < 1) {
         raf = requestAnimationFrame(tick);
       } else {
-        node.style.strokeDashoffset = String(
-          RING_C * (1 - value / 100),
-        );
+        node.style.strokeDashoffset =
+          String(
+            RING_C * (1 - value / 100),
+          );
 
         label.textContent = `${value}%`;
       }
@@ -254,7 +270,8 @@ function ProgressRing({
 
     raf = requestAnimationFrame(tick);
 
-    return () => cancelAnimationFrame(raf);
+    return () =>
+      cancelAnimationFrame(raf);
   }, [value, animate]);
 
   return (
@@ -263,7 +280,10 @@ function ProgressRing({
       role="img"
       aria-label={`Overall progress ${value} percent`}
     >
-      <svg viewBox="0 0 80 80" aria-hidden="true">
+      <svg
+        viewBox="0 0 80 80"
+        aria-hidden="true"
+      >
         <circle
           cx="40"
           cy="40"
@@ -307,28 +327,56 @@ function ProgressRing({
 // ============================================================
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<User>(FALLBACK_USER);
+  const [user, setUser] =
+    useState<User>(FALLBACK_USER);
 
-  const [notifs] = useState<Notif[]>(MOCK_NOTIFS);
+  const [notifs] =
+    useState<Notif[]>(MOCK_NOTIFS);
 
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] =
+    useState(false);
+
+  const [settingsOpen, setSettingsOpen] =
+    useState(false);
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  const [settingsView, setSettingsView] =
+    useState<SettingsView>("main");
 
   const [theme, setTheme] =
     useState<"light" | "dark">("light");
 
-  const [nameDraft, setNameDraft] = useState("");
-  const [emailDraft, setEmailDraft] = useState("");
+  const [nameDraft, setNameDraft] =
+    useState("");
 
-  const [streakImgOk, setStreakImgOk] = useState(true);
+  const [emailDraft, setEmailDraft] =
+    useState("");
+
+  const [settingsSaving, setSettingsSaving] =
+    useState(false);
+
+  const [settingsError, setSettingsError] =
+    useState("");
+
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "error" | "success";
+  } | null>(null);
+
+  const [streakImgOk, setStreakImgOk] =
+    useState(true);
 
   // ==========================================================
   // POPUP REFS
   // ==========================================================
 
-  const notifRef = useRef<HTMLDivElement>(null);
-  const settingsRef = useRef<HTMLDivElement>(null);
+  const notifRef =
+    useRef<HTMLDivElement>(null);
+
+  const settingsRef =
+    useRef<HTMLDivElement>(null);
 
   // ==========================================================
   // PHOTO / CROP
@@ -337,17 +385,27 @@ export default function DashboardPage() {
   const [photoPreview, setPhotoPreview] =
     useState<string | null>(null);
 
-  const [selectedPhotoSource, setSelectedPhotoSource] =
-    useState<string | null>(null);
+  const [
+    selectedPhotoSource,
+    setSelectedPhotoSource,
+  ] = useState<string | null>(null);
 
-  const [selectedPhotoFile, setSelectedPhotoFile] =
-    useState<File | null>(null);
+  const [
+    selectedPhotoFile,
+    setSelectedPhotoFile,
+  ] = useState<File | null>(null);
 
-  const [cropOpen, setCropOpen] = useState(false);
+  const [cropOpen, setCropOpen] =
+    useState(false);
 
-  const [cropZoom, setCropZoom] = useState(1);
-  const [cropX, setCropX] = useState(0);
-  const [cropY, setCropY] = useState(0);
+  const [cropZoom, setCropZoom] =
+    useState(1);
+
+  const [cropX, setCropX] =
+    useState(0);
+
+  const [cropY, setCropY] =
+    useState(0);
 
   const [photoSaving, setPhotoSaving] =
     useState(false);
@@ -398,11 +456,14 @@ export default function DashboardPage() {
           return;
         }
 
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("fullname, avatar_url")
-          .eq("id", authUser.id)
-          .maybeSingle();
+        const { data: profile } =
+          await supabase
+            .from("profiles")
+            .select(
+              "fullname, avatar_url",
+            )
+            .eq("id", authUser.id)
+            .maybeSingle();
 
         if (!mounted) return;
 
@@ -418,7 +479,9 @@ export default function DashboardPage() {
         });
 
         setNameDraft(fullname);
-        setEmailDraft(authUser.email || "");
+        setEmailDraft(
+          authUser.email || "",
+        );
 
         if (!fullname) {
           setNeedsNameSetup(true);
@@ -450,7 +513,8 @@ export default function DashboardPage() {
     const handleOutsideClick = (
       event: MouseEvent,
     ) => {
-      const target = event.target as Node;
+      const target =
+        event.target as Node;
 
       if (
         notifOpen &&
@@ -463,9 +527,12 @@ export default function DashboardPage() {
       if (
         settingsOpen &&
         settingsRef.current &&
-        !settingsRef.current.contains(target)
+        !settingsRef.current.contains(
+          target,
+        )
       ) {
         setSettingsOpen(false);
+        setSettingsView("main");
       }
     };
 
@@ -480,10 +547,13 @@ export default function DashboardPage() {
         handleOutsideClick,
       );
     };
-  }, [notifOpen, settingsOpen]);
+  }, [
+    notifOpen,
+    settingsOpen,
+  ]);
 
   // ==========================================================
-  // PREVENT BACKGROUND SCROLL WHEN MODALS ARE OPEN
+  // PREVENT BACKGROUND SCROLL
   // ==========================================================
 
   useEffect(() => {
@@ -494,7 +564,8 @@ export default function DashboardPage() {
 
     if (!locked) {
       document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
+      document.documentElement.style.overflow =
+        "";
 
       return;
     }
@@ -505,7 +576,9 @@ export default function DashboardPage() {
     const previousHtmlOverflow =
       document.documentElement.style.overflow;
 
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow =
+      "hidden";
+
     document.documentElement.style.overflow =
       "hidden";
 
@@ -530,7 +603,10 @@ export default function DashboardPage() {
     const saved =
       localStorage.getItem(
         "learnmate-theme",
-      ) as "light" | "dark" | null;
+      ) as
+      | "light"
+      | "dark"
+      | null;
 
     if (saved) {
       setTheme(saved);
@@ -553,15 +629,71 @@ export default function DashboardPage() {
   }, [theme]);
 
   // ==========================================================
-  // SAVE NAME
+  // TOAST
+  // ==========================================================
+
+  const showToast = (
+    message: string,
+    type:
+      | "error"
+      | "success" = "error",
+  ) => {
+    setToast({
+      message,
+      type,
+    });
+
+    window.setTimeout(() => {
+      setToast(null);
+    }, 3200);
+  };
+
+  // ==========================================================
+  // VALIDATION
+  // ==========================================================
+
+  const isValidLearnMateName = (
+    name: string,
+  ) => {
+    /*
+      Letters, numbers and spaces only.
+      Rejects:
+      -=+@#$%^&*()
+      and all other special characters.
+    */
+
+    return /^[A-Za-z0-9 ]+$/.test(name);
+  };
+
+  const isValidEmail = (
+    email: string,
+  ) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      email.trim(),
+    );
+  };
+
+  // ==========================================================
+  // SAVE NAME — FIRST LOGIN
   // ==========================================================
 
   const saveLearnMateName = async () => {
-    const cleaned = nameDraft.trim();
+    const cleaned =
+      nameDraft.trim();
 
     if (!cleaned) {
       setNameError(
         "Please enter your name.",
+      );
+
+      return;
+    }
+
+    if (
+      !isValidLearnMateName(cleaned)
+    ) {
+      setNameError(
+        "Name can't have special characters like -=+@#$%^&*() etc.",
       );
 
       return;
@@ -574,20 +706,27 @@ export default function DashboardPage() {
       const {
         data: { user: authUser },
         error: userError,
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
-      if (userError || !authUser) {
-        window.location.href = "/auth";
+      if (
+        userError ||
+        !authUser
+      ) {
+        window.location.href =
+          "/auth";
+
         return;
       }
 
-      const { error: updateError } =
-        await supabase
-          .from("profiles")
-          .update({
-            fullname: cleaned,
-          })
-          .eq("id", authUser.id);
+      const {
+        error: updateError,
+      } = await supabase
+        .from("profiles")
+        .update({
+          fullname: cleaned,
+        })
+        .eq("id", authUser.id);
 
       if (updateError) {
         setNameError(
@@ -615,38 +754,220 @@ export default function DashboardPage() {
   };
 
   // ==========================================================
-  // SAVE SETTINGS
+  // CHANGE LEARNMATE NAME
   // ==========================================================
 
-  const saveSettings = async () => {
-    const cleaned = nameDraft.trim();
+  const changeLearnMateName =
+    async () => {
+      const cleaned =
+        nameDraft.trim();
 
-    if (!cleaned) return;
+      if (!cleaned) {
+        showToast(
+          "Please enter your name.",
+        );
 
-    try {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-
-      if (!authUser) {
-        window.location.href = "/auth";
         return;
       }
 
-      const { error } =
-        await supabase
+      if (
+        !isValidLearnMateName(
+          cleaned,
+        )
+      ) {
+        showToast(
+          "Name can't have special characters like -=+@#$%^&*() etc.",
+        );
+
+        return;
+      }
+
+      setSettingsSaving(true);
+
+      try {
+        const {
+          data: { user: authUser },
+        } =
+          await supabase.auth.getUser();
+
+        if (!authUser) {
+          window.location.href =
+            "/auth";
+
+          return;
+        }
+
+        const {
+          error,
+        } = await supabase
           .from("profiles")
           .update({
             fullname: cleaned,
           })
           .eq("id", authUser.id);
 
-      if (error) {
-        console.error(
-          "Could not update name:",
-          error,
+        if (error) {
+          showToast(error.message);
+          return;
+        }
+
+        setUser((current) => ({
+          ...current,
+          name: cleaned,
+        }));
+
+        setNameDraft(cleaned);
+
+        showToast(
+          "Your LearnMate name has been changed.",
+          "success",
         );
 
+        setSettingsView("main");
+      } catch (error) {
+        console.error(error);
+
+        showToast(
+          "Something went wrong while changing your name.",
+        );
+      } finally {
+        setSettingsSaving(false);
+      }
+    };
+
+  // ==========================================================
+  // CHANGE EMAIL
+  // ==========================================================
+
+  const changeEmail = async () => {
+    const cleaned =
+      emailDraft.trim();
+
+    if (!cleaned) {
+      showToast(
+        "Please enter your email.",
+      );
+
+      return;
+    }
+
+    if (
+      !isValidEmail(cleaned)
+    ) {
+      showToast(
+        "Please enter a valid email address.",
+      );
+
+      return;
+    }
+
+    if (
+      cleaned.toLowerCase() ===
+      user.email.toLowerCase()
+    ) {
+      showToast(
+        "This is already your current email.",
+      );
+
+      return;
+    }
+
+    setSettingsSaving(true);
+
+    try {
+      const {
+        data: { user: authUser },
+      } =
+        await supabase.auth.getUser();
+
+      if (!authUser) {
+        window.location.href =
+          "/auth";
+
+        return;
+      }
+
+      const {
+        error,
+      } =
+        await supabase.auth.updateUser({
+          email: cleaned,
+        });
+
+      if (error) {
+        showToast(error.message);
+        return;
+      }
+
+      showToast(
+        "Check your new email to confirm the change.",
+        "success",
+      );
+
+      setSettingsView("main");
+    } catch (error) {
+      console.error(error);
+
+      showToast(
+        "Something went wrong while changing your email.",
+      );
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  // ==========================================================
+  // SAVE SETTINGS
+  // ==========================================================
+
+  const saveSettings = async () => {
+    const cleaned =
+      nameDraft.trim();
+
+    if (!cleaned) {
+      showToast(
+        "Please enter your name.",
+      );
+
+      return;
+    }
+
+    if (
+      !isValidLearnMateName(cleaned)
+    ) {
+      showToast(
+        "Name can't have special characters like -=+@#$%^&*() etc.",
+      );
+
+      return;
+    }
+
+    setSettingsSaving(true);
+
+    try {
+      const {
+        data: { user: authUser },
+      } =
+        await supabase.auth.getUser();
+
+      if (!authUser) {
+        window.location.href =
+          "/auth";
+
+        return;
+      }
+
+      const {
+        error,
+      } = await supabase
+        .from("profiles")
+        .update({
+          fullname: cleaned,
+        })
+        .eq("id", authUser.id);
+
+      if (error) {
+        showToast(error.message);
         return;
       }
 
@@ -655,9 +976,20 @@ export default function DashboardPage() {
         name: cleaned,
       }));
 
-      setSettingsOpen(false);
+      setNameDraft(cleaned);
+
+      showToast(
+        "Your LearnMate name has been updated.",
+        "success",
+      );
     } catch (error) {
       console.error(error);
+
+      showToast(
+        "Something went wrong while saving your settings.",
+      );
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -695,7 +1027,8 @@ export default function DashboardPage() {
       );
     }
 
-    window.location.href = "/auth";
+    window.location.href =
+      "/auth";
   };
 
   // ==========================================================
@@ -705,7 +1038,8 @@ export default function DashboardPage() {
   const handlePhotoSelect = (
     e: ChangeEvent<HTMLInputElement>,
   ) => {
-    const file = e.target.files?.[0];
+    const file =
+      e.target.files?.[0];
 
     if (!file) return;
 
@@ -716,7 +1050,11 @@ export default function DashboardPage() {
       "image/png",
     ];
 
-    if (!allowedTypes.includes(file.type)) {
+    if (
+      !allowedTypes.includes(
+        file.type,
+      )
+    ) {
       setPhotoError(
         "Only JPG, JPEG and PNG images are allowed.",
       );
@@ -726,7 +1064,10 @@ export default function DashboardPage() {
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
+    if (
+      file.size >
+      8 * 1024 * 1024
+    ) {
       setPhotoError(
         "Please choose an image smaller than 8 MB.",
       );
@@ -740,7 +1081,9 @@ export default function DashboardPage() {
       URL.createObjectURL(file);
 
     setSelectedPhotoFile(file);
-    setSelectedPhotoSource(objectUrl);
+    setSelectedPhotoSource(
+      objectUrl,
+    );
 
     setCropZoom(1);
     setCropX(0);
@@ -754,7 +1097,9 @@ export default function DashboardPage() {
   // ==========================================================
 
   const cancelCrop = () => {
-    if (selectedPhotoSource) {
+    if (
+      selectedPhotoSource
+    ) {
       URL.revokeObjectURL(
         selectedPhotoSource,
       );
@@ -768,8 +1113,11 @@ export default function DashboardPage() {
     setCropX(0);
     setCropY(0);
 
-    if (photoInputRef.current) {
-      photoInputRef.current.value = "";
+    if (
+      photoInputRef.current
+    ) {
+      photoInputRef.current.value =
+        "";
     }
   };
 
@@ -777,216 +1125,265 @@ export default function DashboardPage() {
   // FINALIZE + UPLOAD PHOTO
   // ==========================================================
 
-  const finalizePhoto = async () => {
-    if (!selectedPhotoSource) return;
-
-    setPhotoSaving(true);
-    setPhotoError("");
-
-    try {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-
-      if (!authUser) {
-        window.location.href = "/auth";
+  const finalizePhoto =
+    async () => {
+      if (
+        !selectedPhotoSource
+      )
         return;
-      }
 
-      const image =
-        photoImageRef.current;
+      setPhotoSaving(true);
+      setPhotoError("");
 
-      if (!image) {
-        throw new Error(
-          "Image could not be loaded.",
+      try {
+        const {
+          data: { user: authUser },
+        } =
+          await supabase.auth.getUser();
+
+        if (!authUser) {
+          window.location.href =
+            "/auth";
+
+          return;
+        }
+
+        const image =
+          photoImageRef.current;
+
+        if (!image) {
+          throw new Error(
+            "Image could not be loaded.",
+          );
+        }
+
+        const canvas =
+          document.createElement(
+            "canvas",
+          );
+
+        const OUTPUT_SIZE = 800;
+
+        canvas.width =
+          OUTPUT_SIZE;
+
+        canvas.height =
+          OUTPUT_SIZE;
+
+        const ctx =
+          canvas.getContext("2d");
+
+        if (!ctx) {
+          throw new Error(
+            "Could not prepare image editor.",
+          );
+        }
+
+        const naturalWidth =
+          image.naturalWidth;
+
+        const naturalHeight =
+          image.naturalHeight;
+
+        if (
+          !naturalWidth ||
+          !naturalHeight
+        ) {
+          throw new Error(
+            "Image dimensions could not be read.",
+          );
+        }
+
+        const baseScale =
+          Math.max(
+            OUTPUT_SIZE /
+            naturalWidth,
+            OUTPUT_SIZE /
+            naturalHeight,
+          );
+
+        const scale =
+          baseScale *
+          cropZoom;
+
+        const drawWidth =
+          naturalWidth * scale;
+
+        const drawHeight =
+          naturalHeight * scale;
+
+        const offsetX =
+          (OUTPUT_SIZE -
+            drawWidth) /
+          2 +
+          (cropX / 100) *
+          OUTPUT_SIZE;
+
+        const offsetY =
+          (OUTPUT_SIZE -
+            drawHeight) /
+          2 +
+          (cropY / 100) *
+          OUTPUT_SIZE;
+
+        ctx.clearRect(
+          0,
+          0,
+          OUTPUT_SIZE,
+          OUTPUT_SIZE,
         );
-      }
 
-      const canvas =
-        document.createElement("canvas");
-
-      const OUTPUT_SIZE = 800;
-
-      canvas.width = OUTPUT_SIZE;
-      canvas.height = OUTPUT_SIZE;
-
-      const ctx =
-        canvas.getContext("2d");
-
-      if (!ctx) {
-        throw new Error(
-          "Could not prepare image editor.",
-        );
-      }
-
-      const naturalWidth =
-        image.naturalWidth;
-
-      const naturalHeight =
-        image.naturalHeight;
-
-      if (
-        !naturalWidth ||
-        !naturalHeight
-      ) {
-        throw new Error(
-          "Image dimensions could not be read.",
-        );
-      }
-
-      const baseScale =
-        Math.max(
-          OUTPUT_SIZE / naturalWidth,
-          OUTPUT_SIZE / naturalHeight,
+        ctx.drawImage(
+          image,
+          offsetX,
+          offsetY,
+          drawWidth,
+          drawHeight,
         );
 
-      const scale =
-        baseScale * cropZoom;
+        const blob =
+          await new Promise<Blob | null>(
+            (resolve) =>
+              canvas.toBlob(
+                resolve,
+                "image/jpeg",
+                0.9,
+              ),
+          );
 
-      const drawWidth =
-        naturalWidth * scale;
+        if (!blob) {
+          throw new Error(
+            "Could not create the final image.",
+          );
+        }
 
-      const drawHeight =
-        naturalHeight * scale;
+        const path =
+          `${authUser.id}/profile.jpg`;
 
-      const offsetX =
-        (OUTPUT_SIZE - drawWidth) / 2 +
-        (cropX / 100) * OUTPUT_SIZE;
+        const {
+          error: uploadError,
+        } =
+          await supabase.storage
+            .from("avatars")
+            .upload(
+              path,
+              blob,
+              {
+                contentType:
+                  "image/jpeg",
+                upsert: true,
+                cacheControl:
+                  "3600",
+              },
+            );
 
-      const offsetY =
-        (OUTPUT_SIZE - drawHeight) / 2 +
-        (cropY / 100) * OUTPUT_SIZE;
+        if (uploadError) {
+          throw uploadError;
+        }
 
-      ctx.clearRect(
-        0,
-        0,
-        OUTPUT_SIZE,
-        OUTPUT_SIZE,
-      );
+        const {
+          data: publicUrlData,
+        } =
+          supabase.storage
+            .from("avatars")
+            .getPublicUrl(
+              path,
+            );
 
-      ctx.drawImage(
-        image,
-        offsetX,
-        offsetY,
-        drawWidth,
-        drawHeight,
-      );
+        const publicUrl =
+          `${publicUrlData.publicUrl}?v=${Date.now()}`;
 
-      const blob =
-        await new Promise<Blob | null>(
-          (resolve) =>
-            canvas.toBlob(
-              resolve,
-              "image/jpeg",
-              0.9,
+        const {
+          error: profileError,
+        } =
+          await supabase
+            .from("profiles")
+            .update({
+              avatar_url:
+                publicUrl,
+            })
+            .eq(
+              "id",
+              authUser.id,
+            );
+
+        if (profileError) {
+          throw profileError;
+        }
+
+        setPhotoPreview(
+          publicUrl,
+        );
+
+        setUser((current) => ({
+          ...current,
+          avatarUrl:
+            publicUrl,
+        }));
+
+        if (
+          selectedPhotoSource
+        ) {
+          URL.revokeObjectURL(
+            selectedPhotoSource,
+          );
+        }
+
+        setSelectedPhotoSource(
+          null,
+        );
+
+        setSelectedPhotoFile(
+          null,
+        );
+
+        setCropOpen(false);
+
+        setCropZoom(1);
+        setCropX(0);
+        setCropY(0);
+
+        if (
+          photoInputRef.current
+        ) {
+          photoInputRef.current.value =
+            "";
+        }
+
+        showToast(
+          "Profile photo updated.",
+          "success",
+        );
+      } catch (error) {
+        console.error(
+          "Could not save profile photo:",
+          error,
+        );
+
+        if (
+          error &&
+          typeof error ===
+          "object" &&
+          "message" in error
+        ) {
+          setPhotoError(
+            String(
+              (
+                error as {
+                  message: string;
+                }
+              ).message,
             ),
-        );
-
-      if (!blob) {
-        throw new Error(
-          "Could not create the final image.",
-        );
+          );
+        } else {
+          setPhotoError(
+            "Could not save the profile photo. Please try again.",
+          );
+        }
+      } finally {
+        setPhotoSaving(false);
       }
-
-      const path =
-        `${authUser.id}/profile.jpg`;
-
-      const {
-        error: uploadError,
-      } = await supabase.storage
-        .from("avatars")
-        .upload(
-          path,
-          blob,
-          {
-            contentType:
-              "image/jpeg",
-            upsert: true,
-            cacheControl: "3600",
-          },
-        );
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      const {
-        data: publicUrlData,
-      } =
-        supabase.storage
-          .from("avatars")
-          .getPublicUrl(path);
-
-      const publicUrl =
-        `${publicUrlData.publicUrl}?v=${Date.now()}`;
-
-      const {
-        error: profileError,
-      } =
-        await supabase
-          .from("profiles")
-          .update({
-            avatar_url: publicUrl,
-          })
-          .eq("id", authUser.id);
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      setPhotoPreview(publicUrl);
-
-      setUser((current) => ({
-        ...current,
-        avatarUrl: publicUrl,
-      }));
-
-      if (selectedPhotoSource) {
-        URL.revokeObjectURL(
-          selectedPhotoSource,
-        );
-      }
-
-      setSelectedPhotoSource(null);
-      setSelectedPhotoFile(null);
-      setCropOpen(false);
-
-      setCropZoom(1);
-      setCropX(0);
-      setCropY(0);
-
-      if (photoInputRef.current) {
-        photoInputRef.current.value = "";
-      }
-    } catch (error) {
-      console.error(
-        "Could not save profile photo:",
-        error,
-      );
-
-      if (
-        error &&
-        typeof error === "object" &&
-        "message" in error
-      ) {
-        setPhotoError(
-          String(
-            (
-              error as {
-                message: string;
-              }
-            ).message,
-          ),
-        );
-      } else {
-        setPhotoError(
-          "Could not save the profile photo. Please try again.",
-        );
-      }
-    } finally {
-      setPhotoSaving(false);
-    }
-  };
+    };
 
   // ==========================================================
   // STREAK
@@ -996,7 +1393,9 @@ export default function DashboardPage() {
     MOCK_STREAK_DAYS;
 
   const streak =
-    getStreakMeta(streakDays);
+    getStreakMeta(
+      streakDays,
+    );
 
   // ==========================================================
   // WELCOME
@@ -1029,6 +1428,17 @@ export default function DashboardPage() {
       currentHour,
       user.name,
     );
+
+  // ==========================================================
+  // OPEN SETTINGS
+  // ==========================================================
+
+  const openSettings = () => {
+    setNotifOpen(false);
+    setSettingsView("main");
+    setSettingsError("");
+    setSettingsOpen(true);
+  };
 
   // ==========================================================
   // RENDER
@@ -1117,10 +1527,7 @@ export default function DashboardPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setNotifOpen(false);
-                  setSettingsOpen(true);
-                }}
+                onClick={openSettings}
               >
                 <span
                   className="e"
@@ -1135,10 +1542,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="profile-chip"
-                onClick={() => {
-                  setNotifOpen(false);
-                  setSettingsOpen(true);
-                }}
+                onClick={openSettings}
                 aria-label="Open profile settings"
               >
                 {photoPreview ||
@@ -1221,6 +1625,42 @@ export default function DashboardPage() {
 
               <div className="top-actions">
 
+                {/* DESKTOP THEME TOGGLE */}
+
+                <div className="desktop-theme-toggle">
+                  <button
+                    type="button"
+                    className="theme-switch"
+                    role="switch"
+                    aria-checked={
+                      theme === "dark"
+                    }
+                    aria-label="Toggle dark mode"
+                    onClick={toggleTheme}
+                  >
+                    <span className="theme-orb">
+                      {theme ===
+                        "dark"
+                        ? "☾"
+                        : "☀"}
+                    </span>
+
+                    <span
+                      className={
+                        theme ===
+                          "dark"
+                          ? "theme-label dark-active"
+                          : "theme-label"
+                      }
+                    >
+                      {theme ===
+                        "dark"
+                        ? "Dark"
+                        : "Light"}
+                    </span>
+                  </button>
+                </div>
+
                 {/* NOTIFICATION BUTTON */}
 
                 <button
@@ -1234,7 +1674,9 @@ export default function DashboardPage() {
                   onClick={(e) => {
                     e.stopPropagation();
 
-                    setSettingsOpen(false);
+                    setSettingsOpen(
+                      false,
+                    );
 
                     setNotifOpen(
                       (value) =>
@@ -1249,14 +1691,17 @@ export default function DashboardPage() {
                     🔔
                   </span>
 
-                  {notifs.length > 0 && (
-                    <span
-                      className="dot"
-                      aria-label={`${notifs.length} new`}
-                    >
-                      {notifs.length}
-                    </span>
-                  )}
+                  {notifs.length >
+                    0 && (
+                      <span
+                        className="dot"
+                        aria-label={`${notifs.length} new`}
+                      >
+                        {
+                          notifs.length
+                        }
+                      </span>
+                    )}
                 </button>
 
                 {/* PROFILE BUTTON */}
@@ -1268,7 +1713,13 @@ export default function DashboardPage() {
                   onClick={(e) => {
                     e.stopPropagation();
 
-                    setNotifOpen(false);
+                    setNotifOpen(
+                      false,
+                    );
+
+                    setSettingsView(
+                      "main",
+                    );
 
                     setSettingsOpen(
                       (value) =>
@@ -1313,7 +1764,8 @@ export default function DashboardPage() {
                   Notifications
                 </h4>
 
-                {notifs.length === 0 ? (
+                {notifs.length ===
+                  0 ? (
                   <p className="muted">
                     No new notifications.
                   </p>
@@ -1337,7 +1789,10 @@ export default function DashboardPage() {
 
                           <small>
                             {n.body} ·{" "}
-                            {n.time} ago
+                            {
+                              n.time
+                            }{" "}
+                            ago
                           </small>
                         </span>
                       </div>
@@ -1384,7 +1839,9 @@ export default function DashboardPage() {
                   {streak.gif &&
                     streakImgOk && (
                       <img
-                        src={streak.gif}
+                        src={
+                          streak.gif
+                        }
                         alt=""
                         onError={() =>
                           setStreakImgOk(
@@ -1397,7 +1854,9 @@ export default function DashboardPage() {
                   {(!streak.gif ||
                     !streakImgOk) && (
                       <span className="streak-emoji">
-                        {streak.emoji}
+                        {
+                          streak.emoji
+                        }
                       </span>
                     )}
                 </div>
@@ -1408,11 +1867,15 @@ export default function DashboardPage() {
                   </b>
 
                   <div className="big">
-                    {streak.title}
+                    {
+                      streak.title
+                    }
                   </div>
 
                   <small>
-                    {streak.sub}
+                    {
+                      streak.sub
+                    }
                   </small>
                 </div>
 
@@ -1433,7 +1896,9 @@ export default function DashboardPage() {
                   </b>
 
                   <div className="big">
-                    {MOCK_STUDY_TIME}
+                    {
+                      MOCK_STUDY_TIME
+                    }
                   </div>
 
                   <small>
@@ -1513,7 +1978,8 @@ export default function DashboardPage() {
                         <div className="bar">
                           <i
                             style={{
-                              width: "0%",
+                              width:
+                                "0%",
                             }}
                           />
                         </div>
@@ -1675,7 +2141,13 @@ export default function DashboardPage() {
                 e.target ===
                 e.currentTarget
               ) {
-                setSettingsOpen(false);
+                setSettingsOpen(
+                  false,
+                );
+
+                setSettingsView(
+                  "main",
+                );
               }
             }}
           >
@@ -1688,215 +2160,518 @@ export default function DashboardPage() {
               aria-label="Settings"
             >
 
-              <header>
+              {/* ==================================================
+                  SETTINGS MAIN VIEW
+              ================================================== */}
 
-                <div className="set-title">
+              {settingsView ===
+                "main" && (
+                  <>
+                    <header>
 
-                  <b>
-                    Settings
-                  </b>
+                      <div className="set-title">
 
-                  <br />
+                        <b>
+                          Settings
+                        </b>
 
-                  <small className="muted-text">
-                    {user.email}
-                  </small>
+                        <br />
 
-                </div>
+                        <small className="muted-text">
+                          {
+                            user.email
+                          }
+                        </small>
 
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() =>
-                    setSettingsOpen(
-                      false,
-                    )
-                  }
-                  aria-label="Close settings"
-                >
-                  ✕
-                </button>
+                      </div>
 
-              </header>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          setSettingsOpen(
+                            false,
+                          );
 
-              <div className="body">
+                          setSettingsView(
+                            "main",
+                          );
+                        }}
+                        aria-label="Close settings"
+                      >
+                        ✕
+                      </button>
 
-                {/* PROFILE PREVIEW */}
+                    </header>
 
-                <div className="settings-profile">
+                    <div className="body">
 
-                  <div className="settings-avatar">
+                      {/* PROFILE PREVIEW */}
 
-                    {photoPreview ||
-                      user.avatarUrl ? (
-                      <img
-                        src={
-                          photoPreview ??
-                          user.avatarUrl ??
-                          ""
+                      <div className="settings-profile">
+
+                        <div className="settings-avatar">
+
+                          {photoPreview ||
+                            user.avatarUrl ? (
+                            <img
+                              src={
+                                photoPreview ??
+                                user.avatarUrl ??
+                                ""
+                              }
+                              alt="Profile photo"
+                            />
+                          ) : (
+                            <span>
+                              {
+                                initial
+                              }
+                            </span>
+                          )}
+
+                        </div>
+
+                        <div>
+                          <b>
+                            {user.name ||
+                              "Student"}
+                          </b>
+
+                          <small>
+                            Profile photo
+                          </small>
+                        </div>
+
+                      </div>
+
+                      {/* NAME */}
+
+                      <div className="settings-value-section">
+
+                        <label>
+                          LearnMate name
+                        </label>
+
+                        <div className="settings-value">
+                          {user.name ||
+                            "Student"}
+                        </div>
+
+                        <button
+                          type="button"
+                          className="change-setting-btn"
+                          onClick={() => {
+                            setNameDraft(
+                              user.name,
+                            );
+
+                            setSettingsError(
+                              "",
+                            );
+
+                            setSettingsView(
+                              "name",
+                            );
+                          }}
+                        >
+                          Change your name?
+                        </button>
+
+                      </div>
+
+                      {/* EMAIL */}
+
+                      <div className="settings-value-section">
+
+                        <label>
+                          Email
+                        </label>
+
+                        <div className="settings-value email-value">
+                          {
+                            user.email
+                          }
+                        </div>
+
+                        <button
+                          type="button"
+                          className="change-setting-btn"
+                          onClick={() => {
+                            setEmailDraft(
+                              user.email,
+                            );
+
+                            setSettingsError(
+                              "",
+                            );
+
+                            setSettingsView(
+                              "email",
+                            );
+                          }}
+                        >
+                          Change your mail?
+                        </button>
+
+                      </div>
+
+                      {/* PROFILE PHOTO */}
+
+                      <div className="field">
+
+                        <label>
+                          Profile photo
+                        </label>
+
+                        <input
+                          ref={
+                            photoInputRef
+                          }
+                          id="lm-photo"
+                          type="file"
+                          accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                          className="photo-file-input"
+                          onChange={
+                            handlePhotoSelect
+                          }
+                        />
+
+                        <button
+                          type="button"
+                          className="upload-photo-btn"
+                          onClick={() =>
+                            photoInputRef.current?.click()
+                          }
+                        >
+                          <span>
+                            {photoPreview ||
+                              user.avatarUrl
+                              ? "Change profile photo"
+                              : "Upload profile photo"}
+                          </span>
+
+                          <span
+                            aria-hidden="true"
+                          >
+                            ↑
+                          </span>
+                        </button>
+
+                        <small className="photo-help">
+                          JPG or PNG · Maximum 8 MB
+                        </small>
+
+                        {photoError && (
+                          <p className="photo-error">
+                            {
+                              photoError
+                            }
+                          </p>
+                        )}
+
+                      </div>
+
+                      {/* MOBILE DARK MODE */}
+
+                      <div className="switch mobile-theme-setting">
+
+                        <span>
+                          Dark mode{" "}
+                          <small className="muted-text">
+                            Theme preference
+                          </small>
+                        </span>
+
+                        <button
+                          type="button"
+                          className="theme-switch settings-theme-switch"
+                          role="switch"
+                          aria-checked={
+                            theme ===
+                            "dark"
+                          }
+                          aria-label="Toggle dark mode"
+                          onClick={
+                            toggleTheme
+                          }
+                        >
+                          <span className="theme-orb">
+                            {theme ===
+                              "dark"
+                              ? "☾"
+                              : "☀"}
+                          </span>
+
+                          <span className="theme-label">
+                            {theme ===
+                              "dark"
+                              ? "Dark"
+                              : "Light"}
+                          </span>
+                        </button>
+
+                      </div>
+
+                      {/* ACTIONS */}
+
+                      <div className="row2">
+
+                        <button
+                          type="button"
+                          className="btn-cream bordered"
+                          onClick={
+                            saveSettings
+                          }
+                          disabled={
+                            settingsSaving
+                          }
+                        >
+                          {settingsSaving
+                            ? "Saving..."
+                            : "Save"}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn-brown centered"
+                          onClick={
+                            handleLogout
+                          }
+                        >
+                          Log out
+                        </button>
+
+                      </div>
+
+                    </div>
+                  </>
+                )}
+
+              {/* ==================================================
+                  CHANGE NAME VIEW
+              ================================================== */}
+
+              {settingsView ===
+                "name" && (
+                  <div className="settings-change-view">
+
+                    <header>
+
+                      <button
+                        type="button"
+                        className="settings-back"
+                        onClick={() =>
+                          setSettingsView(
+                            "main",
+                          )
                         }
-                        alt="Profile photo"
+                      >
+                        ← Back
+                      </button>
+
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          setSettingsOpen(
+                            false,
+                          );
+
+                          setSettingsView(
+                            "main",
+                          );
+                        }}
+                        aria-label="Close settings"
+                      >
+                        ✕
+                      </button>
+
+                    </header>
+
+                    <div className="settings-change-content">
+
+                      <h2>
+                        <TypewriterHeading
+                          text="Set your new LearnMate name"
+                        />
+                      </h2>
+
+                      <p>
+                        Choose the name you
+                        want LearnMate to use
+                        when welcoming you.
+                      </p>
+
+                      <input
+                        autoFocus
+                        value={
+                          nameDraft
+                        }
+                        onChange={(e) => {
+                          setNameDraft(
+                            e.target
+                              .value,
+                          );
+
+                          setSettingsError(
+                            "",
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key ===
+                            "Enter" &&
+                            !settingsSaving
+                          ) {
+                            changeLearnMateName();
+                          }
+                        }}
+                        placeholder="Enter your new name"
+                        maxLength={40}
                       />
-                    ) : (
-                      <span>
-                        {initial}
-                      </span>
-                    )}
+
+                      <button
+                        type="button"
+                        className="btn-brown name-save"
+                        onClick={
+                          changeLearnMateName
+                        }
+                        disabled={
+                          settingsSaving
+                        }
+                      >
+                        {settingsSaving
+                          ? "Saving..."
+                          : "Save name"}
+
+                        {!settingsSaving && (
+                          <span aria-hidden="true">
+                            →
+                          </span>
+                        )}
+                      </button>
+
+                    </div>
 
                   </div>
+                )}
 
-                  <div>
-                    <b>
-                      {user.name ||
-                        "Student"}
-                    </b>
+              {/* ==================================================
+                  CHANGE EMAIL VIEW
+              ================================================== */}
 
-                    <small>
-                      Profile photo
-                    </small>
+              {settingsView ===
+                "email" && (
+                  <div className="settings-change-view">
+
+                    <header>
+
+                      <button
+                        type="button"
+                        className="settings-back"
+                        onClick={() =>
+                          setSettingsView(
+                            "main",
+                          )
+                        }
+                      >
+                        ← Back
+                      </button>
+
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          setSettingsOpen(
+                            false,
+                          );
+
+                          setSettingsView(
+                            "main",
+                          );
+                        }}
+                        aria-label="Close settings"
+                      >
+                        ✕
+                      </button>
+
+                    </header>
+
+                    <div className="settings-change-content">
+
+                      <h2>
+                        <TypewriterHeading
+                          text="Enter your new email"
+                        />
+                      </h2>
+
+                      <p>
+                        Enter the email address
+                        you want to use with
+                        your LearnMate account.
+                      </p>
+
+                      <input
+                        autoFocus
+                        type="email"
+                        value={
+                          emailDraft
+                        }
+                        onChange={(e) => {
+                          setEmailDraft(
+                            e.target
+                              .value,
+                          );
+
+                          setSettingsError(
+                            "",
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key ===
+                            "Enter" &&
+                            !settingsSaving
+                          ) {
+                            changeEmail();
+                          }
+                        }}
+                        placeholder="Enter your new email"
+                        maxLength={120}
+                      />
+
+                      <p className="email-change-note">
+                        You may need to confirm
+                        the new email from your
+                        inbox.
+                      </p>
+
+                      <button
+                        type="button"
+                        className="btn-brown name-save"
+                        onClick={
+                          changeEmail
+                        }
+                        disabled={
+                          settingsSaving
+                        }
+                      >
+                        {settingsSaving
+                          ? "Updating..."
+                          : "Change email"}
+
+                        {!settingsSaving && (
+                          <span aria-hidden="true">
+                            →
+                          </span>
+                        )}
+                      </button>
+
+                    </div>
+
                   </div>
-
-                </div>
-
-                {/* NAME */}
-
-                <div className="field">
-
-                  <label htmlFor="lm-name">
-                    LearnMate name
-                  </label>
-
-                  <input
-                    id="lm-name"
-                    value={nameDraft}
-                    onChange={(e) =>
-                      setNameDraft(
-                        e.target.value,
-                      )
-                    }
-                    placeholder="Your LearnMate name"
-                    maxLength={40}
-                  />
-
-                </div>
-
-                {/* EMAIL */}
-
-                <div className="field">
-
-                  <label htmlFor="lm-email">
-                    Email
-                  </label>
-
-                  <input
-                    id="lm-email"
-                    value={emailDraft}
-                    readOnly
-                  />
-
-                </div>
-
-                {/* PROFILE PHOTO */}
-
-                <div className="field">
-
-                  <label>
-                    Profile photo
-                  </label>
-
-                  <input
-                    ref={photoInputRef}
-                    id="lm-photo"
-                    type="file"
-                    accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-                    className="photo-file-input"
-                    onChange={
-                      handlePhotoSelect
-                    }
-                  />
-
-                  <button
-                    type="button"
-                    className="upload-photo-btn"
-                    onClick={() =>
-                      photoInputRef.current?.click()
-                    }
-                  >
-                    <span>
-                      {photoPreview ||
-                        user.avatarUrl
-                        ? "Change profile photo"
-                        : "Upload profile photo"}
-                    </span>
-
-                    <span aria-hidden="true">
-                      ↑
-                    </span>
-                  </button>
-
-                  <small className="photo-help">
-                    JPG or PNG · Maximum 8 MB
-                  </small>
-
-                  {photoError && (
-                    <p className="photo-error">
-                      {photoError}
-                    </p>
-                  )}
-
-                </div>
-
-                {/* DARK MODE */}
-
-                <div className="switch">
-
-                  <span>
-                    Dark mode{" "}
-                    <small className="muted-text">
-                      Theme preference
-                    </small>
-                  </span>
-
-                  <button
-                    type="button"
-                    className="toggle"
-                    role="switch"
-                    aria-checked={
-                      theme === "dark"
-                    }
-                    aria-label="Toggle dark mode"
-                    onClick={toggleTheme}
-                  />
-
-                </div>
-
-                {/* ACTIONS */}
-
-                <div className="row2">
-
-                  <button
-                    type="button"
-                    className="btn-cream bordered"
-                    onClick={
-                      saveSettings
-                    }
-                  >
-                    Save
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn-brown centered"
-                    onClick={
-                      handleLogout
-                    }
-                  >
-                    Log out
-                  </button>
-
-                </div>
-
-              </div>
+                )}
 
             </div>
           </div>
@@ -1984,11 +2759,14 @@ export default function DashboardPage() {
                       min="1"
                       max="3"
                       step="0.01"
-                      value={cropZoom}
+                      value={
+                        cropZoom
+                      }
                       onChange={(e) =>
                         setCropZoom(
                           Number(
-                            e.target.value,
+                            e.target
+                              .value,
                           ),
                         )
                       }
@@ -2005,11 +2783,14 @@ export default function DashboardPage() {
                       min="-25"
                       max="25"
                       step="1"
-                      value={cropX}
+                      value={
+                        cropX
+                      }
                       onChange={(e) =>
                         setCropX(
                           Number(
-                            e.target.value,
+                            e.target
+                              .value,
                           ),
                         )
                       }
@@ -2026,11 +2807,14 @@ export default function DashboardPage() {
                       min="-25"
                       max="25"
                       step="1"
-                      value={cropY}
+                      value={
+                        cropY
+                      }
                       onChange={(e) =>
                         setCropY(
                           Number(
-                            e.target.value,
+                            e.target
+                              .value,
                           ),
                         )
                       }
@@ -2040,8 +2824,12 @@ export default function DashboardPage() {
                 </div>
 
                 <img
-                  ref={photoImageRef}
-                  src={selectedPhotoSource}
+                  ref={
+                    photoImageRef
+                  }
+                  src={
+                    selectedPhotoSource
+                  }
                   alt=""
                   className="crop-hidden-image"
                 />
@@ -2051,8 +2839,12 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     className="crop-cancel"
-                    onClick={cancelCrop}
-                    disabled={photoSaving}
+                    onClick={
+                      cancelCrop
+                    }
+                    disabled={
+                      photoSaving
+                    }
                   >
                     Cancel
                   </button>
@@ -2063,7 +2855,9 @@ export default function DashboardPage() {
                     onClick={
                       finalizePhoto
                     }
-                    disabled={photoSaving}
+                    disabled={
+                      photoSaving
+                    }
                   >
                     {photoSaving
                       ? "Saving..."
@@ -2104,19 +2898,24 @@ export default function DashboardPage() {
 
               <input
                 autoFocus
-                value={nameDraft}
+                value={
+                  nameDraft
+                }
                 onChange={(e) => {
                   setNameDraft(
                     e.target.value,
                   );
 
                   if (nameError) {
-                    setNameError("");
+                    setNameError(
+                      "",
+                    );
                   }
                 }}
                 onKeyDown={(e) => {
                   if (
-                    e.key === "Enter" &&
+                    e.key ===
+                    "Enter" &&
                     !nameSaving
                   ) {
                     saveLearnMateName();
@@ -2138,7 +2937,9 @@ export default function DashboardPage() {
                 onClick={
                   saveLearnMateName
                 }
-                disabled={nameSaving}
+                disabled={
+                  nameSaving
+                }
               >
                 {nameSaving
                   ? "Saving..."
@@ -2152,6 +2953,32 @@ export default function DashboardPage() {
               </button>
 
             </div>
+          </div>
+        )}
+
+        {/* ======================================================
+            TOAST
+        ====================================================== */}
+
+        {toast && (
+          <div
+            className={`lm-toast ${toast.type ===
+                "success"
+                ? "success"
+                : "error"
+              }`}
+            role="alert"
+          >
+            <span className="toast-icon">
+              {toast.type ===
+                "success"
+                ? "✓"
+                : "!"}
+            </span>
+
+            <span>
+              {toast.message}
+            </span>
           </div>
         )}
 
@@ -2182,16 +3009,25 @@ function TypewriterHeading({
         index += 1;
 
         setDisplayed(
-          text.slice(0, index),
+          text.slice(
+            0,
+            index,
+          ),
         );
 
-        if (index >= text.length) {
-          window.clearInterval(timer);
+        if (
+          index >= text.length
+        ) {
+          window.clearInterval(
+            timer,
+          );
         }
       }, 55);
 
     return () =>
-      window.clearInterval(timer);
+      window.clearInterval(
+        timer,
+      );
   }, [text]);
 
   return (
@@ -2272,7 +3108,6 @@ body{
     Roboto,
     Arial,
     sans-serif;
-
   background:var(--bg);
   color:var(--text);
   min-height:100vh;
@@ -2557,6 +3392,82 @@ body{
   width:100%;
   height:100%;
   object-fit:cover
+}
+
+/* ============================================================
+   DESKTOP THEME TOGGLE
+============================================================ */
+
+.lm .desktop-theme-toggle{
+  display:flex;
+  align-items:center
+}
+
+.lm .theme-switch{
+  width:72px;
+  height:34px;
+  min-height:34px;
+  border-radius:999px;
+  background:var(--track);
+  border:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:3px 5px 3px 4px;
+  position:relative;
+  overflow:hidden;
+  box-shadow:
+    inset 0 1px 2px rgba(0,0,0,.08),
+    0 2px 8px rgba(122,47,0,.06)
+}
+
+.lm .theme-switch:hover{
+  border-color:var(--cream);
+  box-shadow:
+    inset 0 1px 2px rgba(0,0,0,.08),
+    0 0 14px rgba(233,198,137,.18)
+}
+
+.lm .theme-orb{
+  width:26px;
+  height:26px;
+  border-radius:50%;
+  background:#fff;
+  color:#4A1E00;
+  display:grid;
+  place-items:center;
+  font-size:13px;
+  flex-shrink:0;
+  box-shadow:
+    0 2px 7px rgba(0,0,0,.18);
+  transition:
+    transform .35s cubic-bezier(.22,1,.36,1),
+    background-color .25s ease
+}
+
+.lm .theme-switch[aria-checked="true"]{
+  background:#2B1A0D;
+  border-color:#4A3019;
+  justify-content:flex-end;
+  padding-left:5px;
+  padding-right:4px
+}
+
+.lm .theme-switch[aria-checked="true"] .theme-orb{
+  background:#34323d;
+  color:#F6E8D0
+}
+
+.lm .theme-label{
+  font-size:9px;
+  font-weight:800;
+  color:var(--text-2);
+  line-height:1;
+  user-select:none
+}
+
+.lm .theme-switch[aria-checked="true"] .theme-label{
+  color:#F6E8D0
 }
 
 /* ============================================================
@@ -3063,36 +3974,176 @@ body{
   color:var(--muted)
 }
 
-.lm .toggle{
-  width:50px;
-  height:30px;
-  border-radius:999px;
-  background:var(--track);
-  position:relative;
-  flex-shrink:0;
-  min-height:30px
+/* ============================================================
+   SETTINGS NAME / EMAIL ROWS
+============================================================ */
+
+.lm .settings-value-section{
+  padding:2px 0;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start
 }
 
-.lm .toggle:after{
-  content:"";
-  position:absolute;
-  top:3px;
-  left:3px;
-  width:24px;
-  height:24px;
-  border-radius:50%;
-  background:#fff;
+.lm .settings-value-section label{
+  font-size:13px;
+  font-weight:600;
+  display:block;
+  margin-bottom:6px
+}
+
+.lm .settings-value{
+  width:100%;
+  min-height:44px;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--card-2);
+  color:var(--text);
+  display:flex;
+  align-items:center;
+  font-size:14px;
+  overflow-wrap:anywhere
+}
+
+.lm .email-value{
+  color:var(--text-2)
+}
+
+.lm .change-setting-btn{
+  margin-top:7px;
+  padding:3px 0;
+  min-height:28px;
+  color:var(--brown);
+  font-size:12px;
+  font-weight:700;
+  text-decoration:underline;
+  text-decoration-color:rgba(122,47,0,.25);
+  text-underline-offset:3px;
+  transition:
+    color .2s ease,
+    text-decoration-color .2s ease
+}
+
+.lm .change-setting-btn:hover{
+  color:#9A3B00;
+  text-decoration-color:#9A3B00
+}
+
+/* ============================================================
+   SETTINGS CHANGE VIEW
+============================================================ */
+
+.lm .settings-change-view{
+  min-height:420px;
+  animation:settingsViewFade .35s ease forwards
+}
+
+@keyframes settingsViewFade{
+  from{
+    opacity:0;
+    transform:translateY(8px)
+  }
+  to{
+    opacity:1;
+    transform:none
+  }
+}
+
+.lm .settings-change-view > header{
+  min-height:70px
+}
+
+.lm .settings-back{
+  font-size:13px;
+  font-weight:700;
+  color:var(--text-2);
+  min-height:38px;
+  padding:6px 4px;
+  border-radius:9px;
+  transition:
+    color .2s ease,
+    background-color .2s ease
+}
+
+.lm .settings-back:hover{
+  color:var(--brown);
+  background:var(--cream-soft)
+}
+
+.lm .settings-change-content{
+  padding:42px 30px 34px;
+  text-align:center;
+  animation:
+    settingsContentFade
+    .55s
+    ease
+    .08s
+    both
+}
+
+@keyframes settingsContentFade{
+  from{
+    opacity:0;
+    transform:translateY(10px)
+  }
+  to{
+    opacity:1;
+    transform:none
+  }
+}
+
+.lm .settings-change-content h2{
+  font-size:25px;
+  line-height:1.25;
+  letter-spacing:-.025em;
+  margin-bottom:11px;
+  min-height:32px
+}
+
+.lm .settings-change-content > p{
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.6;
+  max-width:400px;
+  margin:0 auto 22px
+}
+
+.lm .settings-change-content input{
+  width:100%;
+  min-height:50px;
+  padding:13px 15px;
+  border-radius:13px;
+  border:1px solid var(--border);
+  background:var(--card-2);
+  color:var(--text);
+  font:inherit;
+  outline:none;
+  text-align:left;
+  transition:
+    border-color .25s ease,
+    box-shadow .25s ease
+}
+
+.lm .settings-change-content input:focus{
+  border-color:var(--brown);
   box-shadow:
-    0 1px 2px
-    rgba(0,0,0,.3)
+    0 0 0 3px
+    rgba(122,47,0,.08)
 }
 
-.lm .toggle[aria-checked="true"]{
-  background:var(--brown)
+.lm .settings-change-content .name-save{
+  width:100%;
+  justify-content:center;
+  margin-top:12px
 }
 
-.lm .toggle[aria-checked="true"]:after{
-  left:23px
+.lm .email-change-note{
+  margin:8px auto 0!important;
+  font-size:11px!important;
+  line-height:1.5!important;
+  color:var(--muted)!important;
+  max-width:390px!important
 }
 
 /* ============================================================
@@ -3151,19 +4202,62 @@ body{
   min-height:48px;
   padding:12px 14px;
   border-radius:13px;
-  border:1px solid var(--border);
+  border:1px solid rgba(233,198,137,.5);
   background:var(--card-2);
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:10px;
   font-weight:700;
-  color:var(--text)
+  color:var(--text);
+  position:relative;
+  overflow:hidden;
+  box-shadow:
+    0 0 0 1px
+      rgba(233,198,137,.08),
+    0 0 18px
+      rgba(233,198,137,.08);
+  transition:
+    border-color .25s ease,
+    background-color .25s ease,
+    box-shadow .3s ease
+}
+
+.lm .upload-photo-btn::before{
+  content:"";
+  position:absolute;
+  top:-60%;
+  left:-25%;
+  width:35%;
+  height:220%;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(255,255,255,.18),
+      transparent
+    );
+  transform:rotate(18deg);
+  opacity:0;
+  transition:
+    left .55s ease,
+    opacity .35s ease;
+  pointer-events:none
 }
 
 .lm .upload-photo-btn:hover{
-  border-color:var(--brown);
-  background:var(--cream-soft)
+  background:var(--card-2);
+  border-color:var(--cream);
+  box-shadow:
+    0 0 0 1px
+      rgba(233,198,137,.15),
+    0 0 24px
+      rgba(233,198,137,.18)
+}
+
+.lm .upload-photo-btn:hover::before{
+  left:110%;
+  opacity:1
 }
 
 .lm .photo-help{
@@ -3177,6 +4271,19 @@ body{
   color:#B42318;
   font-size:12px;
   margin-top:7px
+}
+
+/* ============================================================
+   MOBILE SETTINGS THEME
+============================================================ */
+
+.lm .mobile-theme-setting{
+  display:flex
+}
+
+.lm .settings-theme-switch{
+  width:74px;
+  flex-shrink:0
 }
 
 /* ============================================================
@@ -3394,6 +4501,87 @@ body{
 }
 
 /* ============================================================
+   TOAST
+============================================================ */
+
+.lm-toast{
+  position:fixed;
+  left:50%;
+  bottom:28px;
+  transform:
+    translateX(-50%)
+    translateY(18px);
+  z-index:500;
+  min-width:min(380px,calc(100vw - 32px));
+  max-width:calc(100vw - 32px);
+  padding:12px 16px;
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:var(--card);
+  color:var(--text);
+  border:1px solid var(--border);
+  box-shadow:
+    0 14px 40px
+    rgba(40,18,0,.22);
+  font-size:13px;
+  font-weight:600;
+  animation:
+    toastIn
+    .32s
+    cubic-bezier(.22,1,.36,1)
+    forwards
+}
+
+@keyframes toastIn{
+  from{
+    opacity:0;
+    transform:
+      translateX(-50%)
+      translateY(18px)
+  }
+
+  to{
+    opacity:1;
+    transform:
+      translateX(-50%)
+      translateY(0)
+  }
+}
+
+.lm-toast.error{
+  border-color:
+    rgba(217,45,32,.25)
+}
+
+.lm-toast.success{
+  border-color:
+    rgba(122,47,0,.25)
+}
+
+.lm-toast .toast-icon{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  flex-shrink:0;
+  font-size:12px;
+  font-weight:900
+}
+
+.lm-toast.error .toast-icon{
+  background:#FEE4E2;
+  color:#B42318
+}
+
+.lm-toast.success .toast-icon{
+  background:var(--cream-soft);
+  color:var(--brown)
+}
+
+/* ============================================================
    ANIMATION
 ============================================================ */
 
@@ -3496,6 +4684,10 @@ body{
 ============================================================ */
 
 @media(max-width:860px){
+
+  .lm .desktop-theme-toggle{
+    display:none
+  }
 
   .lm .sidebar{
     transform:translateX(-105%);
@@ -3618,6 +4810,14 @@ body{
   .lm .crop-preview{
     width:min(280px,78vw)
   }
+
+  .lm .settings-change-content{
+    padding:
+      34px
+      24px
+      30px
+  }
+
 }
 
 /* ============================================================
@@ -3696,7 +4896,29 @@ body{
   .lm .name-setup h2{
     font-size:22px
   }
+
+  .lm .settings-change-content{
+    padding:
+      30px
+      18px
+      26px
+  }
+
+  .lm .settings-change-content h2{
+    font-size:22px
+  }
+
+  .lm-toast{
+    bottom:18px;
+    min-width:
+      calc(100vw - 28px);
+  }
+
 }
+
+/* ============================================================
+   VERY SMALL PHONES
+============================================================ */
 
 @media(max-width:380px){
 
@@ -3716,5 +4938,13 @@ body{
   .lm .crop-actions{
     grid-template-columns:1fr
   }
+
+  .lm .settings-change-content{
+    padding:
+      26px
+      15px
+      24px
+  }
+
 }
 `;

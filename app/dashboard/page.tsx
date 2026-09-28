@@ -9,10 +9,6 @@ import {
 
 import { createClient } from "../../lib/supabase/client";
 
-// ============================================================
-// TYPES
-// ============================================================
-
 type User = {
   name: string;
   email: string;
@@ -36,15 +32,9 @@ type StreakMeta = {
 
 type SettingsView = "main" | "name" | "email";
 
-// ============================================================
-// SUPABASE
-// ============================================================
+type ConfirmAction = "logout" | "delete" | null;
 
 const supabase = createClient();
-
-// ============================================================
-// FALLBACK USER
-// ============================================================
 
 const FALLBACK_USER: User = {
   name: "",
@@ -53,27 +43,17 @@ const FALLBACK_USER: User = {
   avatarUrl: null,
 };
 
-// ============================================================
-// NOTIFICATIONS
-// ============================================================
-
 const MOCK_NOTIFS: Notif[] = [];
-
-// ============================================================
-// ZERO STATES
-// ============================================================
 
 const MOCK_OVERALL_PROGRESS = 0;
 const MOCK_STUDY_TIME = "0h 0m";
 
-// ============================================================
-// STREAK
-// ============================================================
-
-const MOCK_STREAK_DAYS = 0;
+/* ============================================================
+   STREAK
+============================================================ */
 
 function getStreakMeta(days: number): StreakMeta {
-  if (days < 3) {
+  if (days <= 3) {
     return {
       key: "turtle",
       emoji: "🐢",
@@ -93,28 +73,94 @@ function getStreakMeta(days: number): StreakMeta {
     };
   }
 
-  if (days > 7) {
-    return {
-      key: "fire",
-      emoji: "🔥",
-      title: `${days} days`,
-      sub: "On fire — keep it up!",
-      gif: "/fire.gif",
-    };
-  }
-
   return {
-    key: "normal",
+    key: "fire",
     emoji: "🔥",
     title: `${days} days`,
-    sub: "Keep learning",
-    gif: null,
+    sub: "On fire — keep it up!",
+    gif: "/fire.gif",
   };
 }
 
-// ============================================================
-// NAVIGATION
-// ============================================================
+/*
+  Calculates the current consecutive streak from activity dates.
+
+  Example:
+  28 Sep
+  27 Sep
+  26 Sep
+
+  = 3 days
+
+  If the user returns on 30 Sep:
+
+  30 Sep
+  29 Sep  <- missing
+
+  = 1 day
+*/
+function calculateCurrentStreak(dates: string[]): number {
+  if (!dates.length) return 0;
+
+  const uniqueDates = Array.from(new Set(dates)).sort(
+    (a, b) => b.localeCompare(a),
+  );
+
+  const today = new Date();
+  const todayString = getLocalDateString(today);
+
+  /*
+    If today's visit hasn't been recorded yet for some reason,
+    calculate from the latest recorded date.
+  */
+  const firstDate =
+    uniqueDates[0] === todayString
+      ? todayString
+      : uniqueDates[0];
+
+  let streak = 1;
+
+  for (let i = 1; i < uniqueDates.length; i += 1) {
+    const current = parseDateString(firstDate);
+    current.setDate(
+      current.getDate() - (streak),
+    );
+
+    const expected = getLocalDateString(current);
+
+    if (uniqueDates[i] === expected) {
+      streak += 1;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(
+    date.getMonth() + 1,
+  ).padStart(2, "0");
+  const day = String(
+    date.getDate(),
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateString(value: string): Date {
+  const [year, month, day] = value
+    .split("-")
+    .map(Number);
+
+  return new Date(
+    year,
+    month - 1,
+    day,
+  );
+}
 
 const NAV_ITEMS = [
   { emoji: "🏠", label: "Dashboard", active: true },
@@ -127,10 +173,6 @@ const NAV_ITEMS = [
 ];
 
 const RING_C = 201.06;
-
-// ============================================================
-// GREETING
-// ============================================================
 
 function greetingForHour(
   hour: number,
@@ -157,10 +199,6 @@ function greetingForHour(
   return `Night Grind ${safeName}?`;
 }
 
-// ============================================================
-// TYPEWRITER
-// ============================================================
-
 function useTypewriter(
   text: string,
   speed = 55,
@@ -182,7 +220,6 @@ function useTypewriter(
 
     const timer = window.setInterval(() => {
       index += 1;
-
       setDisplayed(text.slice(0, index));
 
       if (index >= text.length) {
@@ -190,15 +227,12 @@ function useTypewriter(
       }
     }, speed);
 
-    return () => window.clearInterval(timer);
+    return () =>
+      window.clearInterval(timer);
   }, [text, speed, enabled]);
 
   return displayed;
 }
-
-// ============================================================
-// PROGRESS RING
-// ============================================================
 
 function ProgressRing({
   value,
@@ -217,7 +251,9 @@ function ProgressRing({
     if (!node || !label) return;
 
     const reduced = window
-      .matchMedia("(prefers-reduced-motion: reduce)")
+      .matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      )
       .matches;
 
     if (
@@ -230,12 +266,10 @@ function ProgressRing({
       );
 
       label.textContent = `${value}%`;
-
       return;
     }
 
     let raf = 0;
-
     const t0 = performance.now();
     const dur = 1400;
 
@@ -250,9 +284,10 @@ function ProgressRing({
 
       const v = value * eased;
 
-      node.style.strokeDashoffset = String(
-        RING_C * (1 - v / 100),
-      );
+      node.style.strokeDashoffset =
+        String(
+          RING_C * (1 - v / 100),
+        );
 
       label.textContent = `${Math.round(v)}%`;
 
@@ -261,7 +296,8 @@ function ProgressRing({
       } else {
         node.style.strokeDashoffset =
           String(
-            RING_C * (1 - value / 100),
+            RING_C *
+            (1 - value / 100),
           );
 
         label.textContent = `${value}%`;
@@ -322,10 +358,6 @@ function ProgressRing({
   );
 }
 
-// ============================================================
-// MAIN DASHBOARD
-// ============================================================
-
 export default function DashboardPage() {
   const [user, setUser] =
     useState<User>(FALLBACK_USER);
@@ -360,17 +392,26 @@ export default function DashboardPage() {
   const [settingsError, setSettingsError] =
     useState("");
 
-  const [toast, setToast] = useState<{
-    message: string;
-    type: "error" | "success";
-  } | null>(null);
+  const [toast, setToast] =
+    useState<{
+      message: string;
+      type: "error" | "success";
+    } | null>(null);
 
   const [streakImgOk, setStreakImgOk] =
     useState(true);
 
-  // ==========================================================
-  // POPUP REFS
-  // ==========================================================
+  const [streakDays, setStreakDays] =
+    useState(0);
+
+  const [streakLoading, setStreakLoading] =
+    useState(true);
+
+  const [confirmAction, setConfirmAction] =
+    useState<ConfirmAction>(null);
+
+  const [accountActionLoading, setAccountActionLoading] =
+    useState(false);
 
   const notifRef =
     useRef<HTMLDivElement>(null);
@@ -378,22 +419,14 @@ export default function DashboardPage() {
   const settingsRef =
     useRef<HTMLDivElement>(null);
 
-  // ==========================================================
-  // PHOTO / CROP
-  // ==========================================================
-
   const [photoPreview, setPhotoPreview] =
     useState<string | null>(null);
 
-  const [
-    selectedPhotoSource,
-    setSelectedPhotoSource,
-  ] = useState<string | null>(null);
+  const [selectedPhotoSource, setSelectedPhotoSource] =
+    useState<string | null>(null);
 
-  const [
-    selectedPhotoFile,
-    setSelectedPhotoFile,
-  ] = useState<File | null>(null);
+  const [selectedPhotoFile, setSelectedPhotoFile] =
+    useState<File | null>(null);
 
   const [cropOpen, setCropOpen] =
     useState(false);
@@ -419,10 +452,6 @@ export default function DashboardPage() {
   const photoImageRef =
     useRef<HTMLImageElement>(null);
 
-  // ==========================================================
-  // NAME SETUP
-  // ==========================================================
-
   const [needsNameSetup, setNeedsNameSetup] =
     useState(false);
 
@@ -435,9 +464,9 @@ export default function DashboardPage() {
   const [profileLoading, setProfileLoading] =
     useState(true);
 
-  // ==========================================================
-  // LOAD USER
-  // ==========================================================
+  /* ==========================================================
+     LOAD PROFILE
+  ========================================================== */
 
   useEffect(() => {
     let mounted = true;
@@ -446,7 +475,8 @@ export default function DashboardPage() {
       try {
         const {
           data: { user: authUser },
-        } = await supabase.auth.getUser();
+        } =
+          await supabase.auth.getUser();
 
         if (!authUser) {
           if (mounted) {
@@ -505,9 +535,137 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // ==========================================================
-  // CLOSE NOTIFICATION / SETTINGS ON OUTSIDE CLICK
-  // ==========================================================
+  /* ==========================================================
+     DAILY STREAK
+  ========================================================== */
+
+  useEffect(() => {
+    let mounted = true;
+
+    const recordDailyVisit = async () => {
+      try {
+        setStreakLoading(true);
+
+        const {
+          data: { user: authUser },
+        } =
+          await supabase.auth.getUser();
+
+        if (!authUser) {
+          if (mounted) {
+            setStreakDays(0);
+          }
+
+          return;
+        }
+
+        const today =
+          getLocalDateString(
+            new Date(),
+          );
+
+        /*
+          The primary key is:
+          (user_id, activity_date)
+
+          Therefore visiting multiple times
+          on the same day does NOT increase
+          the streak.
+        */
+        const { error: insertError } =
+          await supabase
+            .from("study_streaks")
+            .upsert(
+              {
+                user_id: authUser.id,
+                activity_date: today,
+              },
+              {
+                onConflict:
+                  "user_id,activity_date",
+                ignoreDuplicates: true,
+              },
+            );
+
+        if (insertError) {
+          console.error(
+            "Could not record daily visit:",
+            insertError,
+          );
+        }
+
+        /*
+          Get all recorded activity dates for
+          this user. The table is small enough
+          for this implementation, and later
+          it can be optimized with a server-side
+          streak function if necessary.
+        */
+        const {
+          data: activity,
+          error: activityError,
+        } =
+          await supabase
+            .from("study_streaks")
+            .select("activity_date")
+            .eq("user_id", authUser.id)
+            .order(
+              "activity_date",
+              {
+                ascending: false,
+              },
+            );
+
+        if (activityError) {
+          console.error(
+            "Could not load streak history:",
+            activityError,
+          );
+
+          if (mounted) {
+            setStreakDays(0);
+          }
+
+          return;
+        }
+
+        if (!mounted) return;
+
+        const dates =
+          activity?.map(
+            (row) =>
+              row.activity_date,
+          ) || [];
+
+        setStreakDays(
+          calculateCurrentStreak(dates),
+        );
+      } catch (error) {
+        console.error(
+          "Streak error:",
+          error,
+        );
+
+        if (mounted) {
+          setStreakDays(0);
+        }
+      } finally {
+        if (mounted) {
+          setStreakLoading(false);
+        }
+      }
+    };
+
+    recordDailyVisit();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /* ==========================================================
+     OUTSIDE CLICK
+  ========================================================== */
 
   useEffect(() => {
     const handleOutsideClick = (
@@ -519,7 +677,9 @@ export default function DashboardPage() {
       if (
         notifOpen &&
         notifRef.current &&
-        !notifRef.current.contains(target)
+        !notifRef.current.contains(
+          target,
+        )
       ) {
         setNotifOpen(false);
       }
@@ -552,20 +712,26 @@ export default function DashboardPage() {
     settingsOpen,
   ]);
 
-  // ==========================================================
-  // PREVENT BACKGROUND SCROLL
-  // ==========================================================
+  /* ==========================================================
+     LOCK BACKGROUND SCROLL
+     
+     IMPORTANT:
+     menuOpen is included here so that when
+     the mobile sidebar is open, the main
+     dashboard cannot scroll.
+  ========================================================== */
 
   useEffect(() => {
     const locked =
+      menuOpen ||
       settingsOpen ||
       cropOpen ||
-      needsNameSetup;
+      needsNameSetup ||
+      confirmAction !== null;
 
     if (!locked) {
       document.body.style.overflow = "";
-      document.documentElement.style.overflow =
-        "";
+      document.documentElement.style.overflow = "";
 
       return;
     }
@@ -576,9 +742,7 @@ export default function DashboardPage() {
     const previousHtmlOverflow =
       document.documentElement.style.overflow;
 
-    document.body.style.overflow =
-      "hidden";
-
+    document.body.style.overflow = "hidden";
     document.documentElement.style.overflow =
       "hidden";
 
@@ -590,14 +754,16 @@ export default function DashboardPage() {
         previousHtmlOverflow;
     };
   }, [
+    menuOpen,
     settingsOpen,
     cropOpen,
     needsNameSetup,
+    confirmAction,
   ]);
 
-  // ==========================================================
-  // THEME
-  // ==========================================================
+  /* ==========================================================
+     THEME
+  ========================================================== */
 
   useEffect(() => {
     const saved =
@@ -611,11 +777,9 @@ export default function DashboardPage() {
     if (saved) {
       setTheme(saved);
     } else if (
-      window
-        .matchMedia(
-          "(prefers-color-scheme: dark)",
-        )
-        .matches
+      window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches
     ) {
       setTheme("dark");
     }
@@ -628,9 +792,9 @@ export default function DashboardPage() {
     );
   }, [theme]);
 
-  // ==========================================================
-  // TOAST
-  // ==========================================================
+  /* ==========================================================
+     TOAST
+  ========================================================== */
 
   const showToast = (
     message: string,
@@ -648,21 +812,16 @@ export default function DashboardPage() {
     }, 3200);
   };
 
-  // ==========================================================
-  // VALIDATION
-  // ==========================================================
+  /* ==========================================================
+     VALIDATION
+  ========================================================== */
 
   const isValidLearnMateName = (
     name: string,
   ) => {
-    /*
-      Letters, numbers and spaces only.
-      Rejects:
-      -=+@#$%^&*()
-      and all other special characters.
-    */
-
-    return /^[A-Za-z0-9 ]+$/.test(name);
+    return /^[A-Za-z0-9 ]+$/.test(
+      name,
+    );
   };
 
   const isValidEmail = (
@@ -673,89 +832,96 @@ export default function DashboardPage() {
     );
   };
 
-  // ==========================================================
-  // SAVE NAME — FIRST LOGIN
-  // ==========================================================
+  /* ==========================================================
+     FIRST LOGIN NAME
+  ========================================================== */
 
-  const saveLearnMateName = async () => {
-    const cleaned =
-      nameDraft.trim();
+  const saveLearnMateName =
+    async () => {
+      const cleaned =
+        nameDraft.trim();
 
-    if (!cleaned) {
-      setNameError(
-        "Please enter your name.",
-      );
-
-      return;
-    }
-
-    if (
-      !isValidLearnMateName(cleaned)
-    ) {
-      setNameError(
-        "Name can't have special characters like -=+@#$%^&*() etc.",
-      );
-
-      return;
-    }
-
-    setNameSaving(true);
-    setNameError("");
-
-    try {
-      const {
-        data: { user: authUser },
-        error: userError,
-      } =
-        await supabase.auth.getUser();
-
-      if (
-        userError ||
-        !authUser
-      ) {
-        window.location.href =
-          "/auth";
-
-        return;
-      }
-
-      const {
-        error: updateError,
-      } = await supabase
-        .from("profiles")
-        .update({
-          fullname: cleaned,
-        })
-        .eq("id", authUser.id);
-
-      if (updateError) {
+      if (!cleaned) {
         setNameError(
-          updateError.message,
+          "Please enter your name.",
         );
 
         return;
       }
 
-      setUser((prev) => ({
-        ...prev,
-        name: cleaned,
-      }));
+      if (
+        !isValidLearnMateName(
+          cleaned,
+        )
+      ) {
+        setNameError(
+          "Name can't have special characters like -=+@#$%^&*() etc.",
+        );
 
-      setNeedsNameSetup(false);
-    } catch (error) {
-      console.error(error);
+        return;
+      }
 
-      setNameError(
-        "Something went wrong while saving your name.",
-      );
-    } finally {
-      setNameSaving(false);
-    }
-  };
+      setNameSaving(true);
+      setNameError("");
 
-  // ==========================================================
-  // CHANGE LEARNMATE NAME
-  // ==========================================================
+      try {
+        const {
+          data: { user: authUser },
+          error: userError,
+        } =
+          await supabase.auth.getUser();
+
+        if (
+          userError ||
+          !authUser
+        ) {
+          window.location.href =
+            "/auth";
+
+          return;
+        }
+
+        const {
+          error: updateError,
+        } =
+          await supabase
+            .from("profiles")
+            .update({
+              fullname: cleaned,
+            })
+            .eq(
+              "id",
+              authUser.id,
+            );
+
+        if (updateError) {
+          setNameError(
+            updateError.message,
+          );
+
+          return;
+        }
+
+        setUser((prev) => ({
+          ...prev,
+          name: cleaned,
+        }));
+
+        setNeedsNameSetup(false);
+      } catch (error) {
+        console.error(error);
+
+        setNameError(
+          "Something went wrong while saving your name.",
+        );
+      } finally {
+        setNameSaving(false);
+      }
+    };
+
+  /* ==========================================================
+     CHANGE NAME
+  ========================================================== */
 
   const changeLearnMateName =
     async () => {
@@ -797,17 +963,20 @@ export default function DashboardPage() {
           return;
         }
 
-        const {
-          error,
-        } = await supabase
-          .from("profiles")
-          .update({
-            fullname: cleaned,
-          })
-          .eq("id", authUser.id);
+        const { error } =
+          await supabase
+            .from("profiles")
+            .update({
+              fullname: cleaned,
+            })
+            .eq(
+              "id",
+              authUser.id,
+            );
 
         if (error) {
           showToast(error.message);
+
           return;
         }
 
@@ -835,167 +1004,175 @@ export default function DashboardPage() {
       }
     };
 
-  // ==========================================================
-  // CHANGE EMAIL
-  // ==========================================================
+  /* ==========================================================
+     CHANGE EMAIL
+  ========================================================== */
 
-  const changeEmail = async () => {
-    const cleaned =
-      emailDraft.trim();
+  const changeEmail =
+    async () => {
+      const cleaned =
+        emailDraft.trim();
 
-    if (!cleaned) {
-      showToast(
-        "Please enter your email.",
-      );
-
-      return;
-    }
-
-    if (
-      !isValidEmail(cleaned)
-    ) {
-      showToast(
-        "Please enter a valid email address.",
-      );
-
-      return;
-    }
-
-    if (
-      cleaned.toLowerCase() ===
-      user.email.toLowerCase()
-    ) {
-      showToast(
-        "This is already your current email.",
-      );
-
-      return;
-    }
-
-    setSettingsSaving(true);
-
-    try {
-      const {
-        data: { user: authUser },
-      } =
-        await supabase.auth.getUser();
-
-      if (!authUser) {
-        window.location.href =
-          "/auth";
+      if (!cleaned) {
+        showToast(
+          "Please enter your email.",
+        );
 
         return;
       }
 
-      const {
-        error,
-      } =
-        await supabase.auth.updateUser({
-          email: cleaned,
-        });
-
-      if (error) {
-        showToast(error.message);
-        return;
-      }
-
-      showToast(
-        "Check your new email to confirm the change.",
-        "success",
-      );
-
-      setSettingsView("main");
-    } catch (error) {
-      console.error(error);
-
-      showToast(
-        "Something went wrong while changing your email.",
-      );
-    } finally {
-      setSettingsSaving(false);
-    }
-  };
-
-  // ==========================================================
-  // SAVE SETTINGS
-  // ==========================================================
-
-  const saveSettings = async () => {
-    const cleaned =
-      nameDraft.trim();
-
-    if (!cleaned) {
-      showToast(
-        "Please enter your name.",
-      );
-
-      return;
-    }
-
-    if (
-      !isValidLearnMateName(cleaned)
-    ) {
-      showToast(
-        "Name can't have special characters like -=+@#$%^&*() etc.",
-      );
-
-      return;
-    }
-
-    setSettingsSaving(true);
-
-    try {
-      const {
-        data: { user: authUser },
-      } =
-        await supabase.auth.getUser();
-
-      if (!authUser) {
-        window.location.href =
-          "/auth";
+      if (
+        !isValidEmail(cleaned)
+      ) {
+        showToast(
+          "Please enter a valid email address.",
+        );
 
         return;
       }
 
-      const {
-        error,
-      } = await supabase
-        .from("profiles")
-        .update({
-          fullname: cleaned,
-        })
-        .eq("id", authUser.id);
+      if (
+        cleaned.toLowerCase() ===
+        user.email.toLowerCase()
+      ) {
+        showToast(
+          "This is already your current email.",
+        );
 
-      if (error) {
-        showToast(error.message);
         return;
       }
 
-      setUser((current) => ({
-        ...current,
-        name: cleaned,
-      }));
+      setSettingsSaving(true);
 
-      setNameDraft(cleaned);
+      try {
+        const {
+          data: { user: authUser },
+        } =
+          await supabase.auth.getUser();
 
-      showToast(
-        "Your LearnMate name has been updated.",
-        "success",
-      );
-    } catch (error) {
-      console.error(error);
+        if (!authUser) {
+          window.location.href =
+            "/auth";
 
-      showToast(
-        "Something went wrong while saving your settings.",
-      );
-    } finally {
-      setSettingsSaving(false);
-    }
-  };
+          return;
+        }
 
-  // ==========================================================
-  // THEME TOGGLE
-  // ==========================================================
+        const { error } =
+          await supabase.auth.updateUser(
+            {
+              email: cleaned,
+            },
+          );
+
+        if (error) {
+          showToast(error.message);
+
+          return;
+        }
+
+        showToast(
+          "Check your new email to confirm the change.",
+          "success",
+        );
+
+        setSettingsView("main");
+      } catch (error) {
+        console.error(error);
+
+        showToast(
+          "Something went wrong while changing your email.",
+        );
+      } finally {
+        setSettingsSaving(false);
+      }
+    };
+
+  /* ==========================================================
+     SAVE SETTINGS
+  ========================================================== */
+
+  const saveSettings =
+    async () => {
+      const cleaned =
+        nameDraft.trim();
+
+      if (!cleaned) {
+        showToast(
+          "Please enter your name.",
+        );
+
+        return;
+      }
+
+      if (
+        !isValidLearnMateName(
+          cleaned,
+        )
+      ) {
+        showToast(
+          "Name can't have special characters like -=+@#$%^&*() etc.",
+        );
+
+        return;
+      }
+
+      setSettingsSaving(true);
+
+      try {
+        const {
+          data: { user: authUser },
+        } =
+          await supabase.auth.getUser();
+
+        if (!authUser) {
+          window.location.href =
+            "/auth";
+
+          return;
+        }
+
+        const { error } =
+          await supabase
+            .from("profiles")
+            .update({
+              fullname: cleaned,
+            })
+            .eq(
+              "id",
+              authUser.id,
+            );
+
+        if (error) {
+          showToast(error.message);
+
+          return;
+        }
+
+        setUser((current) => ({
+          ...current,
+          name: cleaned,
+        }));
+
+        setNameDraft(cleaned);
+
+        showToast(
+          "Your LearnMate name has been updated.",
+          "success",
+        );
+      } catch (error) {
+        console.error(error);
+
+        showToast(
+          "Something went wrong while saving your settings.",
+        );
+      } finally {
+        setSettingsSaving(false);
+      }
+    };
+
+  /* ==========================================================
+     THEME
+  ========================================================== */
 
   const toggleTheme = () => {
     setTheme((current) => {
@@ -1013,27 +1190,137 @@ export default function DashboardPage() {
     });
   };
 
-  // ==========================================================
-  // LOGOUT
-  // ==========================================================
+  /* ==========================================================
+     LOGOUT
+  ========================================================== */
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error(
-        "Logout error:",
-        error,
-      );
-    }
-
-    window.location.href =
-      "/auth";
+  const requestLogout = () => {
+    setNotifOpen(false);
+    setSettingsOpen(false);
+    setConfirmAction("logout");
   };
 
-  // ==========================================================
-  // PHOTO FILE SELECT
-  // ==========================================================
+  const handleLogout =
+    async () => {
+      setAccountActionLoading(true);
+
+      try {
+        const { error } =
+          await supabase.auth.signOut();
+
+        if (error) {
+          showToast(
+            error.message,
+          );
+
+          setConfirmAction(null);
+          return;
+        }
+
+        window.location.href =
+          "/auth";
+      } catch (error) {
+        console.error(
+          "Logout error:",
+          error,
+        );
+
+        showToast(
+          "Could not log out. Please try again.",
+        );
+
+        setConfirmAction(null);
+      } finally {
+        setAccountActionLoading(
+          false,
+        );
+      }
+    };
+
+  /* ==========================================================
+     DELETE ACCOUNT
+  ========================================================== */
+
+  const requestDeleteAccount =
+    () => {
+      setNotifOpen(false);
+      setSettingsOpen(false);
+      setConfirmAction("delete");
+    };
+
+  const handleDeleteAccount =
+    async () => {
+      setAccountActionLoading(true);
+
+      try {
+        const {
+          data: {
+            session,
+          },
+        } =
+          await supabase.auth.getSession();
+
+        if (!session) {
+          window.location.href =
+            "/auth";
+
+          return;
+        }
+
+        const response =
+          await fetch(
+            "/api/account/delete",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+              },
+            },
+          );
+
+        const result =
+          await response
+            .json()
+            .catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+            "Could not delete your account.",
+          );
+        }
+
+        /*
+          The Auth user has now been deleted.
+          The old account can no longer authenticate.
+        */
+        await supabase.auth.signOut();
+
+        window.location.href =
+          "/auth";
+      } catch (error) {
+        console.error(
+          "Account deletion error:",
+          error,
+        );
+
+        showToast(
+          error instanceof Error
+            ? error.message
+            : "Could not delete your account. Please try again.",
+        );
+
+        setConfirmAction(null);
+      } finally {
+        setAccountActionLoading(
+          false,
+        );
+      }
+    };
+
+  /* ==========================================================
+     PHOTO
+  ========================================================== */
 
   const handlePhotoSelect = (
     e: ChangeEvent<HTMLInputElement>,
@@ -1078,7 +1365,9 @@ export default function DashboardPage() {
     }
 
     const objectUrl =
-      URL.createObjectURL(file);
+      URL.createObjectURL(
+        file,
+      );
 
     setSelectedPhotoFile(file);
     setSelectedPhotoSource(
@@ -1092,14 +1381,8 @@ export default function DashboardPage() {
     setCropOpen(true);
   };
 
-  // ==========================================================
-  // CANCEL CROP
-  // ==========================================================
-
   const cancelCrop = () => {
-    if (
-      selectedPhotoSource
-    ) {
+    if (selectedPhotoSource) {
       URL.revokeObjectURL(
         selectedPhotoSource,
       );
@@ -1108,28 +1391,19 @@ export default function DashboardPage() {
     setSelectedPhotoSource(null);
     setSelectedPhotoFile(null);
     setCropOpen(false);
-
     setCropZoom(1);
     setCropX(0);
     setCropY(0);
 
-    if (
-      photoInputRef.current
-    ) {
+    if (photoInputRef.current) {
       photoInputRef.current.value =
         "";
     }
   };
 
-  // ==========================================================
-  // FINALIZE + UPLOAD PHOTO
-  // ==========================================================
-
   const finalizePhoto =
     async () => {
-      if (
-        !selectedPhotoSource
-      )
+      if (!selectedPhotoSource)
         return;
 
       setPhotoSaving(true);
@@ -1171,7 +1445,9 @@ export default function DashboardPage() {
           OUTPUT_SIZE;
 
         const ctx =
-          canvas.getContext("2d");
+          canvas.getContext(
+            "2d",
+          );
 
         if (!ctx) {
           throw new Error(
@@ -1207,10 +1483,12 @@ export default function DashboardPage() {
           cropZoom;
 
         const drawWidth =
-          naturalWidth * scale;
+          naturalWidth *
+          scale;
 
         const drawHeight =
-          naturalHeight * scale;
+          naturalHeight *
+          scale;
 
         const offsetX =
           (OUTPUT_SIZE -
@@ -1257,8 +1535,7 @@ export default function DashboardPage() {
           );
         }
 
-        const path =
-          `${authUser.id}/profile.jpg`;
+        const path = `${authUser.id}/profile.jpg`;
 
         const {
           error: uploadError,
@@ -1321,9 +1598,7 @@ export default function DashboardPage() {
             publicUrl,
         }));
 
-        if (
-          selectedPhotoSource
-        ) {
+        if (selectedPhotoSource) {
           URL.revokeObjectURL(
             selectedPhotoSource,
           );
@@ -1338,14 +1613,11 @@ export default function DashboardPage() {
         );
 
         setCropOpen(false);
-
         setCropZoom(1);
         setCropX(0);
         setCropY(0);
 
-        if (
-          photoInputRef.current
-        ) {
+        if (photoInputRef.current) {
           photoInputRef.current.value =
             "";
         }
@@ -1385,21 +1657,16 @@ export default function DashboardPage() {
       }
     };
 
-  // ==========================================================
-  // STREAK
-  // ==========================================================
-
-  const streakDays =
-    MOCK_STREAK_DAYS;
+  /* ==========================================================
+     DISPLAY VALUES
+  ========================================================== */
 
   const streak =
     getStreakMeta(
-      streakDays,
+      streakLoading
+        ? 0
+        : streakDays,
     );
-
-  // ==========================================================
-  // WELCOME
-  // ==========================================================
 
   const welcomeText =
     user.name
@@ -1429,28 +1696,22 @@ export default function DashboardPage() {
       user.name,
     );
 
-  // ==========================================================
-  // OPEN SETTINGS
-  // ==========================================================
-
   const openSettings = () => {
+    setMenuOpen(false);
     setNotifOpen(false);
     setSettingsView("main");
     setSettingsError("");
     setSettingsOpen(true);
   };
 
-  // ==========================================================
-  // RENDER
-  // ==========================================================
-
   return (
     <>
       <style>{CSS}</style>
 
       <div className="lm">
-
-        {/* MOBILE SIDEBAR SCRIM */}
+        {/* ==================================================
+            MOBILE SIDEBAR SCRIM
+        ================================================== */}
 
         <div
           className={
@@ -1465,8 +1726,9 @@ export default function DashboardPage() {
         />
 
         <div className="app">
-
-          {/* SIDEBAR */}
+          {/* ==================================================
+              SIDEBAR
+          ================================================== */}
 
           <aside
             className={
@@ -1477,7 +1739,6 @@ export default function DashboardPage() {
             aria-label="Primary navigation"
           >
             <div className="brand">
-
               <img
                 className="brand-mark"
                 src="/onlylogo.png"
@@ -1489,45 +1750,57 @@ export default function DashboardPage() {
                 src="/textlogo.png"
                 alt="LearnMate"
               />
-
             </div>
 
             <nav
               className="nav"
               aria-label="Sections"
             >
-              {NAV_ITEMS.map((n) => (
-                <a
-                  key={n.label}
-                  href="#"
-                  className={
-                    n.active
-                      ? "active"
-                      : ""
-                  }
-                  aria-current={
-                    n.active
-                      ? "page"
-                      : undefined
-                  }
-                >
-                  <span
-                    className="e"
-                    aria-hidden="true"
+              {NAV_ITEMS.map(
+                (n) => (
+                  <a
+                    key={n.label}
+                    href="#"
+                    className={
+                      n.active
+                        ? "active"
+                        : ""
+                    }
+                    aria-current={
+                      n.active
+                        ? "page"
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (
+                        window.innerWidth <=
+                        860
+                      ) {
+                        setMenuOpen(
+                          false,
+                        );
+                      }
+                    }}
                   >
-                    {n.emoji}
-                  </span>
+                    <span
+                      className="e"
+                      aria-hidden="true"
+                    >
+                      {n.emoji}
+                    </span>
 
-                  {n.label}
-                </a>
-              ))}
+                    {n.label}
+                  </a>
+                ),
+              )}
             </nav>
 
             <div className="side-foot">
-
               <button
                 type="button"
-                onClick={openSettings}
+                onClick={
+                  openSettings
+                }
               >
                 <span
                   className="e"
@@ -1542,7 +1815,9 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="profile-chip"
-                onClick={openSettings}
+                onClick={
+                  openSettings
+                }
                 aria-label="Open profile settings"
               >
                 {photoPreview ||
@@ -1580,25 +1855,25 @@ export default function DashboardPage() {
                   ›
                 </span>
               </button>
-
             </div>
           </aside>
 
-          {/* MAIN */}
+          {/* ==================================================
+              MAIN
+          ================================================== */}
 
           <main className="main">
-
             {/* TOP BAR */}
 
             <div className="topbar reveal">
-
               <div className="top-left">
-
                 <button
                   type="button"
                   className="icon-btn menu-btn"
                   onClick={() =>
-                    setMenuOpen(true)
+                    setMenuOpen(
+                      true,
+                    )
                   }
                   aria-label="Open menu"
                 >
@@ -1606,7 +1881,6 @@ export default function DashboardPage() {
                 </button>
 
                 <div>
-
                   <h1 className="h1">
                     {typedWelcome}
 
@@ -1618,13 +1892,10 @@ export default function DashboardPage() {
                   <p className="sub">
                     {welcomeSubtext}
                   </p>
-
                 </div>
-
               </div>
 
               <div className="top-actions">
-
                 {/* DESKTOP THEME TOGGLE */}
 
                 <div className="desktop-theme-toggle">
@@ -1633,10 +1904,13 @@ export default function DashboardPage() {
                     className="theme-switch"
                     role="switch"
                     aria-checked={
-                      theme === "dark"
+                      theme ===
+                      "dark"
                     }
                     aria-label="Toggle dark mode"
-                    onClick={toggleTheme}
+                    onClick={
+                      toggleTheme
+                    }
                   >
                     <span className="theme-orb">
                       {theme ===
@@ -1661,7 +1935,7 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
-                {/* NOTIFICATION BUTTON */}
+                {/* NOTIFICATIONS */}
 
                 <button
                   type="button"
@@ -1671,7 +1945,9 @@ export default function DashboardPage() {
                   aria-expanded={
                     notifOpen
                   }
-                  onClick={(e) => {
+                  onClick={(
+                    e,
+                  ) => {
                     e.stopPropagation();
 
                     setSettingsOpen(
@@ -1679,7 +1955,9 @@ export default function DashboardPage() {
                     );
 
                     setNotifOpen(
-                      (value) =>
+                      (
+                        value,
+                      ) =>
                         !value,
                     );
                   }}
@@ -1704,13 +1982,15 @@ export default function DashboardPage() {
                     )}
                 </button>
 
-                {/* PROFILE BUTTON */}
+                {/* PROFILE */}
 
                 <button
                   type="button"
                   className="avatar"
                   aria-label="Profile"
-                  onClick={(e) => {
+                  onClick={(
+                    e,
+                  ) => {
                     e.stopPropagation();
 
                     setNotifOpen(
@@ -1722,7 +2002,9 @@ export default function DashboardPage() {
                     );
 
                     setSettingsOpen(
-                      (value) =>
+                      (
+                        value,
+                      ) =>
                         !value,
                     );
                   }}
@@ -1743,12 +2025,12 @@ export default function DashboardPage() {
                     </span>
                   )}
                 </button>
-
               </div>
-
             </div>
 
-            {/* NOTIFICATION POPUP */}
+            {/* ==================================================
+                NOTIFICATION POPUP
+            ================================================== */}
 
             {notifOpen && (
               <div
@@ -1767,7 +2049,8 @@ export default function DashboardPage() {
                 {notifs.length ===
                   0 ? (
                   <p className="muted">
-                    No new notifications.
+                    No new
+                    notifications.
                   </p>
                 ) : (
                   notifs.map(
@@ -1782,13 +2065,18 @@ export default function DashboardPage() {
 
                         <span>
                           <b>
-                            {n.title}
+                            {
+                              n.title
+                            }
                           </b>
 
                           <br />
 
                           <small>
-                            {n.body} ·{" "}
+                            {
+                              n.body
+                            }{" "}
+                            ·{" "}
                             {
                               n.time
                             }{" "}
@@ -1802,15 +2090,15 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* STATISTICS */}
+            {/* ==================================================
+                STATISTICS
+            ================================================== */}
 
             <section
               className="stats"
               aria-label="Overview"
             >
-
               <div className="card stat reveal d1">
-
                 <ProgressRing
                   value={
                     MOCK_OVERALL_PROGRESS
@@ -1820,18 +2108,20 @@ export default function DashboardPage() {
 
                 <div>
                   <b className="t">
-                    Overall Progress
+                    Overall
+                    Progress
                   </b>
 
                   <small>
-                    Across all courses
+                    Across all
+                    courses
                   </small>
                 </div>
-
               </div>
 
-              <div className="card stat reveal d2">
+              {/* STREAK CARD */}
 
+              <div className="card stat reveal d2">
                 <div
                   className="streak-visual"
                   aria-hidden="true"
@@ -1867,22 +2157,20 @@ export default function DashboardPage() {
                   </b>
 
                   <div className="big">
-                    {
-                      streak.title
-                    }
+                    {streakLoading
+                      ? "..."
+                      : streak.title}
                   </div>
 
                   <small>
-                    {
-                      streak.sub
-                    }
+                    {streakLoading
+                      ? "Loading streak"
+                      : streak.sub}
                   </small>
                 </div>
-
               </div>
 
               <div className="card stat reveal d3">
-
                 <div
                   className="stat-ic"
                   aria-hidden="true"
@@ -1905,11 +2193,9 @@ export default function DashboardPage() {
                     This week
                   </small>
                 </div>
-
               </div>
 
               <div className="card stat reveal d4">
-
                 <div
                   className="stat-ic"
                   aria-hidden="true"
@@ -1923,56 +2209,56 @@ export default function DashboardPage() {
                   </b>
 
                   <div className="big">
-                    0 active courses
+                    0 active
+                    courses
                   </div>
 
                   <small>
-                    Add your first course
+                    Add your
+                    first course
                   </small>
                 </div>
-
               </div>
-
             </section>
 
-            {/* MAIN GRID */}
+            {/* ==================================================
+                MAIN GRID
+            ================================================== */}
 
             <div className="grid">
-
               <div className="col">
-
                 {/* CONTINUE LEARNING */}
 
                 <section
                   className="hero reveal d2"
                   aria-label="Continue learning"
                 >
-
                   <div className="hero-head">
                     <span aria-hidden="true">
                       📖
                     </span>
 
-                    Continue Learning
+                    Continue
+                    Learning
                   </div>
 
                   <div className="hero-body">
-
                     <div className="empty-course">
-
                       <div className="empty-course-icon">
                         📚
                       </div>
 
                       <div className="hero-info">
-
                         <h3>
-                          Add New Course
+                          Add New
+                          Course
                         </h3>
 
                         <p className="empty-course-text">
-                          add new course to
-                          continue learning
+                          add new
+                          course to
+                          continue
+                          learning
                         </p>
 
                         <div className="bar">
@@ -1985,17 +2271,15 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="hero-meta">
-
                           <span className="empty-course-text">
-                            No course added yet
+                            No course
+                            added yet
                           </span>
 
                           <span className="pct">
                             0%
                           </span>
-
                         </div>
-
                       </div>
 
                       <button
@@ -2007,11 +2291,8 @@ export default function DashboardPage() {
                           →
                         </span>
                       </button>
-
                     </div>
-
                   </div>
-
                 </section>
 
                 {/* PERFORMANCE */}
@@ -2020,55 +2301,53 @@ export default function DashboardPage() {
                   className="perf3 reveal d4"
                   aria-label="Performance"
                 >
-
                   <div className="card pad">
-
                     <h3>
                       <span aria-hidden="true">
                         📊
                       </span>
 
-                      Your Performance
+                      Your
+                      Performance
                     </h3>
 
                     <div className="empty-section">
-                      add new course
+                      add new
+                      course
                     </div>
-
                   </div>
 
                   <div className="card pad">
-
                     <h3>
                       <span aria-hidden="true">
                         ⭐
                       </span>
 
-                      Strong Topics
+                      Strong
+                      Topics
                     </h3>
 
                     <div className="empty-section">
-                      add new course
+                      add new
+                      course
                     </div>
-
                   </div>
 
                   <div className="card pad needs-attention-card">
-
                     <h3 className="warn-title">
                       <span aria-hidden="true">
                         ⚠️
                       </span>
 
-                      Needs Attention
+                      Needs
+                      Attention
                     </h3>
 
                     <div className="empty-section">
-                      add new course
+                      add new
+                      course
                     </div>
-
                   </div>
-
                 </section>
 
                 {/* UPCOMING TESTS */}
@@ -2077,15 +2356,14 @@ export default function DashboardPage() {
                   className="card pad reveal d5"
                   aria-label="Upcoming tests"
                 >
-
                   <div className="sec-head">
-
                     <h3>
                       <span aria-hidden="true">
                         🗓️
                       </span>
 
-                      Upcoming Tests
+                      Upcoming
+                      Tests
                     </h3>
 
                     <a
@@ -2097,13 +2375,12 @@ export default function DashboardPage() {
                         →
                       </span>
                     </a>
-
                   </div>
 
                   <div className="empty-section">
-                    add new course
+                    add new
+                    course
                   </div>
-
                 </section>
 
                 {/* LEARNING JOURNEY */}
@@ -2112,19 +2389,17 @@ export default function DashboardPage() {
                   className="card journey reveal d5"
                   aria-label="Learning journey"
                 >
-
                   <b>
-                    📖 LEARNING JOURNEY
+                    📖 LEARNING
+                    JOURNEY
                   </b>
 
                   <span className="empty-section">
-                    add new course
+                    add new
+                    course
                   </span>
-
                 </section>
-
               </div>
-
             </div>
           </main>
         </div>
@@ -2151,7 +2426,6 @@ export default function DashboardPage() {
               }
             }}
           >
-
             <div
               ref={settingsRef}
               className="modal"
@@ -2159,7 +2433,6 @@ export default function DashboardPage() {
               aria-modal="true"
               aria-label="Settings"
             >
-
               {/* ==================================================
                   SETTINGS MAIN VIEW
               ================================================== */}
@@ -2168,9 +2441,7 @@ export default function DashboardPage() {
                 "main" && (
                   <>
                     <header>
-
                       <div className="set-title">
-
                         <b>
                           Settings
                         </b>
@@ -2182,7 +2453,6 @@ export default function DashboardPage() {
                             user.email
                           }
                         </small>
-
                       </div>
 
                       <button
@@ -2201,17 +2471,13 @@ export default function DashboardPage() {
                       >
                         ✕
                       </button>
-
                     </header>
 
                     <div className="body">
-
                       {/* PROFILE PREVIEW */}
 
                       <div className="settings-profile">
-
                         <div className="settings-avatar">
-
                           {photoPreview ||
                             user.avatarUrl ? (
                             <img
@@ -2229,7 +2495,6 @@ export default function DashboardPage() {
                               }
                             </span>
                           )}
-
                         </div>
 
                         <div>
@@ -2239,18 +2504,18 @@ export default function DashboardPage() {
                           </b>
 
                           <small>
-                            Profile photo
+                            Profile
+                            photo
                           </small>
                         </div>
-
                       </div>
 
                       {/* NAME */}
 
                       <div className="settings-value-section">
-
                         <label>
-                          LearnMate name
+                          LearnMate
+                          name
                         </label>
 
                         <div className="settings-value">
@@ -2275,15 +2540,14 @@ export default function DashboardPage() {
                             );
                           }}
                         >
-                          Change your name?
+                          Change your
+                          name?
                         </button>
-
                       </div>
 
                       {/* EMAIL */}
 
                       <div className="settings-value-section">
-
                         <label>
                           Email
                         </label>
@@ -2311,15 +2575,14 @@ export default function DashboardPage() {
                             );
                           }}
                         >
-                          Change your mail?
+                          Change your
+                          mail?
                         </button>
-
                       </div>
 
                       {/* PROFILE PHOTO */}
 
                       <div className="field">
-
                         <label>
                           Profile photo
                         </label>
@@ -2351,15 +2614,14 @@ export default function DashboardPage() {
                               : "Upload profile photo"}
                           </span>
 
-                          <span
-                            aria-hidden="true"
-                          >
+                          <span aria-hidden="true">
                             ↑
                           </span>
                         </button>
 
                         <small className="photo-help">
-                          JPG or PNG · Maximum 8 MB
+                          JPG or PNG ·
+                          Maximum 8 MB
                         </small>
 
                         {photoError && (
@@ -2369,17 +2631,16 @@ export default function DashboardPage() {
                             }
                           </p>
                         )}
-
                       </div>
 
                       {/* MOBILE DARK MODE */}
 
                       <div className="switch mobile-theme-setting">
-
                         <span>
                           Dark mode{" "}
                           <small className="muted-text">
-                            Theme preference
+                            Theme
+                            preference
                           </small>
                         </span>
 
@@ -2410,13 +2671,50 @@ export default function DashboardPage() {
                               : "Light"}
                           </span>
                         </button>
-
                       </div>
+
+                      {/* ==================================================
+                        DANGER ZONE
+                    ================================================== */}
+
+                      <section className="danger-zone">
+                        <div className="danger-title">
+                          DANGER ZONE
+                        </div>
+
+                        <div className="danger-content">
+                          <div>
+                            <b>
+                              Delete your
+                              account?
+                            </b>
+
+                            <p>
+                              Permanently
+                              delete your
+                              LearnMate
+                              account and
+                              its account
+                              data.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="delete-account-btn"
+                            onClick={
+                              requestDeleteAccount
+                            }
+                          >
+                            Delete
+                            account
+                          </button>
+                        </div>
+                      </section>
 
                       {/* ACTIONS */}
 
                       <div className="row2">
-
                         <button
                           type="button"
                           className="btn-cream bordered"
@@ -2436,14 +2734,12 @@ export default function DashboardPage() {
                           type="button"
                           className="btn-brown centered"
                           onClick={
-                            handleLogout
+                            requestLogout
                           }
                         >
                           Log out
                         </button>
-
                       </div>
-
                     </div>
                   </>
                 )}
@@ -2455,9 +2751,7 @@ export default function DashboardPage() {
               {settingsView ===
                 "name" && (
                   <div className="settings-change-view">
-
                     <header>
-
                       <button
                         type="button"
                         className="settings-back"
@@ -2486,11 +2780,9 @@ export default function DashboardPage() {
                       >
                         ✕
                       </button>
-
                     </header>
 
                     <div className="settings-change-content">
-
                       <h2>
                         <TypewriterHeading
                           text="Set your new LearnMate name"
@@ -2498,9 +2790,11 @@ export default function DashboardPage() {
                       </h2>
 
                       <p>
-                        Choose the name you
-                        want LearnMate to use
-                        when welcoming you.
+                        Choose the name
+                        you want
+                        LearnMate to use
+                        when welcoming
+                        you.
                       </p>
 
                       <input
@@ -2551,9 +2845,7 @@ export default function DashboardPage() {
                           </span>
                         )}
                       </button>
-
                     </div>
-
                   </div>
                 )}
 
@@ -2564,9 +2856,7 @@ export default function DashboardPage() {
               {settingsView ===
                 "email" && (
                   <div className="settings-change-view">
-
                     <header>
-
                       <button
                         type="button"
                         className="settings-back"
@@ -2595,11 +2885,9 @@ export default function DashboardPage() {
                       >
                         ✕
                       </button>
-
                     </header>
 
                     <div className="settings-change-content">
-
                       <h2>
                         <TypewriterHeading
                           text="Enter your new email"
@@ -2607,9 +2895,10 @@ export default function DashboardPage() {
                       </h2>
 
                       <p>
-                        Enter the email address
-                        you want to use with
-                        your LearnMate account.
+                        Enter the email
+                        address you want
+                        to use with your
+                        LearnMate account.
                       </p>
 
                       <input
@@ -2642,8 +2931,9 @@ export default function DashboardPage() {
                       />
 
                       <p className="email-change-note">
-                        You may need to confirm
-                        the new email from your
+                        You may need to
+                        confirm the new
+                        email from your
                         inbox.
                       </p>
 
@@ -2667,12 +2957,9 @@ export default function DashboardPage() {
                           </span>
                         )}
                       </button>
-
                     </div>
-
                   </div>
                 )}
-
             </div>
           </div>
         )}
@@ -2694,23 +2981,22 @@ export default function DashboardPage() {
                 }
               }}
             >
-
               <div
                 className="crop-modal"
                 role="dialog"
                 aria-modal="true"
                 aria-label="Crop profile photo"
               >
-
                 <header className="crop-header">
-
                   <div>
                     <b>
-                      Adjust profile photo
+                      Adjust profile
+                      photo
                     </b>
 
                     <small>
-                      Crop and resize before saving
+                      Crop and resize
+                      before saving
                     </small>
                   </div>
 
@@ -2724,11 +3010,9 @@ export default function DashboardPage() {
                   >
                     ✕
                   </button>
-
                 </header>
 
                 <div className="crop-preview">
-
                   <div
                     className="crop-window"
                     style={{
@@ -2744,11 +3028,9 @@ export default function DashboardPage() {
                   <span className="crop-circle">
                     Profile
                   </span>
-
                 </div>
 
                 <div className="crop-controls">
-
                   <label>
                     <span>
                       Zoom
@@ -2783,9 +3065,7 @@ export default function DashboardPage() {
                       min="-25"
                       max="25"
                       step="1"
-                      value={
-                        cropX
-                      }
+                      value={cropX}
                       onChange={(e) =>
                         setCropX(
                           Number(
@@ -2807,9 +3087,7 @@ export default function DashboardPage() {
                       min="-25"
                       max="25"
                       step="1"
-                      value={
-                        cropY
-                      }
+                      value={cropY}
                       onChange={(e) =>
                         setCropY(
                           Number(
@@ -2820,7 +3098,6 @@ export default function DashboardPage() {
                       }
                     />
                   </label>
-
                 </div>
 
                 <img
@@ -2835,7 +3112,6 @@ export default function DashboardPage() {
                 />
 
                 <div className="crop-actions">
-
                   <button
                     type="button"
                     className="crop-cancel"
@@ -2863,9 +3139,7 @@ export default function DashboardPage() {
                       ? "Saving..."
                       : "Use this photo"}
                   </button>
-
                 </div>
-
               </div>
             </div>
           )}
@@ -2876,14 +3150,12 @@ export default function DashboardPage() {
 
         {needsNameSetup && (
           <div className="name-setup-back">
-
             <div
               className="name-setup reveal"
               role="dialog"
               aria-modal="true"
               aria-label="Set your LearnMate name"
             >
-
               <h2>
                 <TypewriterHeading
                   text="Set your LearnMate name"
@@ -2891,16 +3163,14 @@ export default function DashboardPage() {
               </h2>
 
               <p>
-                Choose the name you want
-                LearnMate to use when
-                welcoming you.
+                Choose the name you
+                want LearnMate to use
+                when welcoming you.
               </p>
 
               <input
                 autoFocus
-                value={
-                  nameDraft
-                }
+                value={nameDraft}
                 onChange={(e) => {
                   setNameDraft(
                     e.target.value,
@@ -2951,7 +3221,117 @@ export default function DashboardPage() {
                   </span>
                 )}
               </button>
+            </div>
+          </div>
+        )}
 
+        {/* ======================================================
+            CONFIRMATION MODAL
+        ====================================================== */}
+
+        {confirmAction && (
+          <div
+            className="confirm-back"
+            onClick={(e) => {
+              if (
+                e.target ===
+                e.currentTarget
+              ) {
+                if (
+                  !accountActionLoading
+                ) {
+                  setConfirmAction(
+                    null,
+                  );
+                }
+              }
+            }}
+          >
+            <div
+              className={
+                confirmAction ===
+                  "delete"
+                  ? "confirm-modal danger-confirm"
+                  : "confirm-modal"
+              }
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="confirm-title"
+            >
+              <div className="confirm-icon">
+                {confirmAction ===
+                  "delete"
+                  ? "!"
+                  : "?"}
+              </div>
+
+              <h2 id="confirm-title">
+                {confirmAction ===
+                  "delete"
+                  ? "Delete your account?"
+                  : "Log out of LearnMate?"}
+              </h2>
+
+              <p>
+                {confirmAction ===
+                  "delete"
+                  ? "This will permanently delete your LearnMate account. You will not be able to sign in to this deleted account again."
+                  : "Are you sure you want to log out of your LearnMate account?"}
+              </p>
+
+              {confirmAction ===
+                "delete" && (
+                  <p className="confirm-warning">
+                    This action cannot be
+                    undone.
+                  </p>
+                )}
+
+              <div className="confirm-actions">
+                <button
+                  type="button"
+                  className="confirm-cancel"
+                  onClick={() =>
+                    setConfirmAction(
+                      null,
+                    )
+                  }
+                  disabled={
+                    accountActionLoading
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className={
+                    confirmAction ===
+                      "delete"
+                      ? "confirm-danger"
+                      : "confirm-primary"
+                  }
+                  onClick={
+                    confirmAction ===
+                      "delete"
+                      ? handleDeleteAccount
+                      : handleLogout
+                  }
+                  disabled={
+                    accountActionLoading
+                  }
+                >
+                  {accountActionLoading
+                    ? confirmAction ===
+                      "delete"
+                      ? "Deleting..."
+                      : "Logging out..."
+                    : confirmAction ===
+                      "delete"
+                      ? "Delete account"
+                      : "Log out"}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -2981,15 +3361,14 @@ export default function DashboardPage() {
             </span>
           </div>
         )}
-
       </div>
     </>
   );
 }
 
-// ============================================================
-// TYPEWRITER HEADING
-// ============================================================
+/* ============================================================
+   TYPEWRITER HEADING
+============================================================ */
 
 function TypewriterHeading({
   text,
@@ -3041,9 +3420,9 @@ function TypewriterHeading({
   );
 }
 
-// ============================================================
-// STYLES
-// ============================================================
+/* ============================================================
+   STYLES
+============================================================ */
 
 const CSS = `
 :root{
@@ -3154,14 +3533,18 @@ body{
   display:flex;
   flex-direction:column;
   padding:18px 14px 14px;
-  z-index:50
+  z-index:50;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch
 }
 
 .lm .brand{
   display:flex;
   align-items:center;
   gap:10px;
-  padding:4px 8px 16px
+  padding:4px 8px 16px;
+  flex-shrink:0
 }
 
 .lm .brand-mark{
@@ -3181,7 +3564,8 @@ body{
   display:flex;
   flex-direction:column;
   gap:4px;
-  margin-top:4px
+  margin-top:4px;
+  flex-shrink:0
 }
 
 .lm .nav a{
@@ -3216,7 +3600,8 @@ body{
   padding-top:10px;
   display:flex;
   flex-direction:column;
-  gap:8px
+  gap:8px;
+  flex-shrink:0
 }
 
 .lm .side-foot button,
@@ -4044,6 +4429,7 @@ body{
     opacity:0;
     transform:translateY(8px)
   }
+
   to{
     opacity:1;
     transform:none
@@ -4087,6 +4473,7 @@ body{
     opacity:0;
     transform:translateY(10px)
   }
+
   to{
     opacity:1;
     transform:none
@@ -4284,6 +4671,68 @@ body{
 .lm .settings-theme-switch{
   width:74px;
   flex-shrink:0
+}
+
+/* ============================================================
+   DANGER ZONE
+============================================================ */
+
+.lm .danger-zone{
+  border:1px solid rgba(217,45,32,.28);
+  border-radius:15px;
+  padding:14px;
+  background:
+    rgba(217,45,32,.035)
+}
+
+.lm .danger-title{
+  color:#B42318;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.09em;
+  margin-bottom:11px
+}
+
+.lm .danger-content{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px
+}
+
+.lm .danger-content > div{
+  min-width:0;
+  flex:1
+}
+
+.lm .danger-content b{
+  display:block;
+  color:#B42318;
+  font-size:14px;
+  margin-bottom:4px
+}
+
+.lm .danger-content p{
+  color:var(--muted);
+  font-size:11.5px;
+  line-height:1.5
+}
+
+.lm .delete-account-btn{
+  min-height:40px!important;
+  padding:9px 12px!important;
+  border-radius:11px!important;
+  border:1px solid rgba(180,35,24,.3)!important;
+  background:rgba(217,45,32,.07)!important;
+  color:#B42318!important;
+  font-size:12px!important;
+  font-weight:800!important;
+  white-space:nowrap
+}
+
+.lm .delete-account-btn:hover{
+  background:rgba(217,45,32,.13)!important;
+  border-color:rgba(180,35,24,.5)!important
 }
 
 /* ============================================================
@@ -4501,6 +4950,130 @@ body{
 }
 
 /* ============================================================
+   CONFIRMATION
+============================================================ */
+
+.lm .confirm-back{
+  position:fixed;
+  inset:0;
+  z-index:400;
+  background:
+    rgba(40,18,0,.52);
+  display:grid;
+  place-items:center;
+  padding:18px;
+  overscroll-behavior:contain;
+  animation:fadeIn .2s ease
+}
+
+.lm .confirm-modal{
+  width:min(430px,100%);
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:28px;
+  box-shadow:
+    0 20px 60px
+    rgba(40,18,0,.25);
+  text-align:center;
+  animation:
+    confirmUp
+    .28s
+    cubic-bezier(.22,1,.36,1)
+    forwards
+}
+
+@keyframes confirmUp{
+  from{
+    opacity:0;
+    transform:translateY(10px) scale(.98)
+  }
+
+  to{
+    opacity:1;
+    transform:none
+  }
+}
+
+.lm .confirm-icon{
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  margin:0 auto 15px;
+  background:var(--cream-soft);
+  color:var(--brown);
+  font-size:20px;
+  font-weight:900
+}
+
+.lm .danger-confirm .confirm-icon{
+  background:#FEE4E2;
+  color:#B42318
+}
+
+.lm .confirm-modal h2{
+  font-size:22px;
+  line-height:1.25;
+  margin-bottom:9px
+}
+
+.lm .confirm-modal > p{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.6;
+  max-width:360px;
+  margin:0 auto
+}
+
+.lm .confirm-warning{
+  color:#B42318!important;
+  font-weight:700;
+  margin-top:8px!important
+}
+
+.lm .confirm-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:22px
+}
+
+.lm .confirm-cancel,
+.lm .confirm-primary,
+.lm .confirm-danger{
+  min-height:46px!important;
+  border-radius:13px!important;
+  font-size:13px!important;
+  font-weight:800!important
+}
+
+.lm .confirm-cancel{
+  border:1px solid var(--border)!important;
+  background:var(--card-2)!important;
+  color:var(--text)!important
+}
+
+.lm .confirm-primary{
+  background:var(--brown)!important;
+  color:#FFF6E3!important
+}
+
+.lm .confirm-primary:hover{
+  background:#8A3A05!important
+}
+
+.lm .confirm-danger{
+  background:#B42318!important;
+  color:#fff!important
+}
+
+.lm .confirm-danger:hover{
+  background:#9B1C12!important
+}
+
+/* ============================================================
    TOAST
 ============================================================ */
 
@@ -4689,12 +5262,22 @@ body{
     display:none
   }
 
+  /*
+    IMPORTANT:
+    Sidebar is independently scrollable.
+    Body scrolling is locked while menuOpen,
+    so the dashboard behind it cannot move.
+  */
+
   .lm .sidebar{
     transform:translateX(-105%);
     transition:
       transform .28s ease;
     border-radius:
-      0 20px 20px 0
+      0 20px 20px 0;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    touch-action:pan-y
   }
 
   .lm .sidebar.open{
@@ -4749,7 +5332,8 @@ body{
     background:
       rgba(0,0,0,.35);
     z-index:40;
-    display:none
+    display:none;
+    touch-action:none
   }
 
   .lm .scrim.show{
@@ -4816,6 +5400,14 @@ body{
       34px
       24px
       30px
+  }
+
+  .lm .danger-content{
+    align-items:flex-start;
+  }
+
+  .lm .delete-account-btn{
+    flex-shrink:0
   }
 
 }
@@ -4908,6 +5500,22 @@ body{
     font-size:22px
   }
 
+  .lm .danger-content{
+    flex-direction:column;
+  }
+
+  .lm .delete-account-btn{
+    width:100%;
+  }
+
+  .lm .confirm-modal{
+    padding:24px 18px
+  }
+
+  .lm .confirm-modal h2{
+    font-size:20px
+  }
+
   .lm-toast{
     bottom:18px;
     min-width:
@@ -4944,6 +5552,10 @@ body{
       26px
       15px
       24px
+  }
+
+  .lm .confirm-actions{
+    grid-template-columns:1fr
   }
 
 }

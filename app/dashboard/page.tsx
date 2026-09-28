@@ -1,10 +1,12 @@
 "use client";
 
-// ============================================================
-// app/dashboard/page.tsx — LearnMate Student Dashboard
-// ============================================================
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 
-import { useEffect, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 
 // ============================================================
@@ -21,32 +23,6 @@ type User = {
 type Notif = {
   title: string;
   body: string;
-  time: string;
-};
-
-type Course = {
-  name: string;
-  chapters: string;
-  pct: number;
-  icon: string;
-};
-
-type PerfRow = {
-  label: string;
-  pct: number;
-};
-
-type UpcomingTest = {
-  title: string;
-  subject: string;
-  chapter: string;
-  when: string;
-  status: string;
-};
-
-type Activity = {
-  title: string;
-  sub: string;
   time: string;
 };
 
@@ -87,11 +63,6 @@ const MOCK_NOTIFS: Notif[] = [];
 
 const MOCK_OVERALL_PROGRESS = 0;
 const MOCK_STUDY_TIME = "0h 0m";
-
-const MOCK_COURSES: Course[] = [];
-const MOCK_PERF: PerfRow[] = [];
-const MOCK_UPCOMING: UpcomingTest[] = [];
-const MOCK_ACTIVITY: Activity[] = [];
 
 // ============================================================
 // STREAK
@@ -206,6 +177,7 @@ function useTypewriter(
 
     const timer = window.setInterval(() => {
       index += 1;
+
       setDisplayed(text.slice(0, index));
 
       if (index >= text.length) {
@@ -247,7 +219,9 @@ function ProgressRing({
       node.style.strokeDashoffset = String(
         RING_C * (1 - value / 100),
       );
+
       label.textContent = `${value}%`;
+
       return;
     }
 
@@ -347,8 +321,14 @@ export default function DashboardPage() {
   const [nameDraft, setNameDraft] = useState("");
   const [emailDraft, setEmailDraft] = useState("");
 
-  const [barsOn, setBarsOn] = useState(false);
   const [streakImgOk, setStreakImgOk] = useState(true);
+
+  // ==========================================================
+  // POPUP REFS
+  // ==========================================================
+
+  const notifRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   // ==========================================================
   // PHOTO / CROP
@@ -430,10 +410,11 @@ export default function DashboardPage() {
           profile?.fullname?.trim() || "";
 
         setUser({
-          name: fullname || "",
+          name: fullname,
           email: authUser.email || "",
           klass: "Student",
-          avatarUrl: profile?.avatar_url || null,
+          avatarUrl:
+            profile?.avatar_url || null,
         });
 
         setNameDraft(fullname);
@@ -462,6 +443,46 @@ export default function DashboardPage() {
   }, []);
 
   // ==========================================================
+  // CLOSE NOTIFICATION / SETTINGS ON OUTSIDE CLICK
+  // ==========================================================
+
+  useEffect(() => {
+    const handleOutsideClick = (
+      event: MouseEvent,
+    ) => {
+      const target = event.target as Node;
+
+      if (
+        notifOpen &&
+        notifRef.current &&
+        !notifRef.current.contains(target)
+      ) {
+        setNotifOpen(false);
+      }
+
+      if (
+        settingsOpen &&
+        settingsRef.current &&
+        !settingsRef.current.contains(target)
+      ) {
+        setSettingsOpen(false);
+      }
+    };
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick,
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick,
+      );
+    };
+  }, [notifOpen, settingsOpen]);
+
+  // ==========================================================
   // PREVENT BACKGROUND SCROLL WHEN MODALS ARE OPEN
   // ==========================================================
 
@@ -474,6 +495,7 @@ export default function DashboardPage() {
     if (!locked) {
       document.body.style.overflow = "";
       document.documentElement.style.overflow = "";
+
       return;
     }
 
@@ -484,7 +506,8 @@ export default function DashboardPage() {
       document.documentElement.style.overflow;
 
     document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.overflow =
+      "hidden";
 
     return () => {
       document.body.style.overflow =
@@ -505,15 +528,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const saved =
-      localStorage.getItem("learnmate-theme") as
-      | "light"
-      | "dark"
-      | null;
+      localStorage.getItem(
+        "learnmate-theme",
+      ) as "light" | "dark" | null;
 
     if (saved) {
       setTheme(saved);
     } else if (
-      window.matchMedia("(prefers-color-scheme: dark)")
+      window
+        .matchMedia(
+          "(prefers-color-scheme: dark)",
+        )
         .matches
     ) {
       setTheme("dark");
@@ -528,28 +553,6 @@ export default function DashboardPage() {
   }, [theme]);
 
   // ==========================================================
-  // BAR ANIMATION
-  // ==========================================================
-
-  useEffect(() => {
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-
-    if (reduced) {
-      setBarsOn(true);
-      return;
-    }
-
-    const timer = window.setTimeout(
-      () => setBarsOn(true),
-      300,
-    );
-
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  // ==========================================================
   // SAVE NAME
   // ==========================================================
 
@@ -557,7 +560,10 @@ export default function DashboardPage() {
     const cleaned = nameDraft.trim();
 
     if (!cleaned) {
-      setNameError("Please enter your name.");
+      setNameError(
+        "Please enter your name.",
+      );
+
       return;
     }
 
@@ -570,20 +576,7 @@ export default function DashboardPage() {
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) {
-        console.error(
-          "Could not get authenticated user:",
-          userError,
-        );
-
-        setNameError(
-          "Your session could not be verified. Please log in again.",
-        );
-
-        return;
-      }
-
-      if (!authUser) {
+      if (userError || !authUser) {
         window.location.href = "/auth";
         return;
       }
@@ -597,12 +590,10 @@ export default function DashboardPage() {
           .eq("id", authUser.id);
 
       if (updateError) {
-        console.error(
-          "Supabase profile update error:",
-          updateError,
+        setNameError(
+          updateError.message,
         );
 
-        setNameError(updateError.message);
         return;
       }
 
@@ -613,10 +604,7 @@ export default function DashboardPage() {
 
       setNeedsNameSetup(false);
     } catch (error) {
-      console.error(
-        "Could not save LearnMate name:",
-        error,
-      );
+      console.error(error);
 
       setNameError(
         "Something went wrong while saving your name.",
@@ -627,7 +615,7 @@ export default function DashboardPage() {
   };
 
   // ==========================================================
-  // SAVE SETTINGS NAME
+  // SAVE SETTINGS
   // ==========================================================
 
   const saveSettings = async () => {
@@ -645,18 +633,20 @@ export default function DashboardPage() {
         return;
       }
 
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          fullname: cleaned,
-        })
-        .eq("id", authUser.id);
+      const { error } =
+        await supabase
+          .from("profiles")
+          .update({
+            fullname: cleaned,
+          })
+          .eq("id", authUser.id);
 
       if (error) {
         console.error(
           "Could not update name:",
           error,
         );
+
         return;
       }
 
@@ -667,10 +657,7 @@ export default function DashboardPage() {
 
       setSettingsOpen(false);
     } catch (error) {
-      console.error(
-        "Could not update name:",
-        error,
-      );
+      console.error(error);
     }
   };
 
@@ -716,7 +703,7 @@ export default function DashboardPage() {
   // ==========================================================
 
   const handlePhotoSelect = (
-    e: React.ChangeEvent<HTMLInputElement>,
+    e: ChangeEvent<HTMLInputElement>,
   ) => {
     const file = e.target.files?.[0];
 
@@ -735,6 +722,7 @@ export default function DashboardPage() {
       );
 
       e.target.value = "";
+
       return;
     }
 
@@ -744,6 +732,7 @@ export default function DashboardPage() {
       );
 
       e.target.value = "";
+
       return;
     }
 
@@ -756,6 +745,7 @@ export default function DashboardPage() {
     setCropZoom(1);
     setCropX(0);
     setCropY(0);
+
     setCropOpen(true);
   };
 
@@ -773,6 +763,7 @@ export default function DashboardPage() {
     setSelectedPhotoSource(null);
     setSelectedPhotoFile(null);
     setCropOpen(false);
+
     setCropZoom(1);
     setCropX(0);
     setCropY(0);
@@ -900,19 +891,20 @@ export default function DashboardPage() {
       const path =
         `${authUser.id}/profile.jpg`;
 
-      const { error: uploadError } =
-        await supabase.storage
-          .from("avatars")
-          .upload(
-            path,
-            blob,
-            {
-              contentType:
-                "image/jpeg",
-              upsert: true,
-              cacheControl: "3600",
-            },
-          );
+      const {
+        error: uploadError,
+      } = await supabase.storage
+        .from("avatars")
+        .upload(
+          path,
+          blob,
+          {
+            contentType:
+              "image/jpeg",
+            upsert: true,
+            cacheControl: "3600",
+          },
+        );
 
       if (uploadError) {
         throw uploadError;
@@ -928,7 +920,9 @@ export default function DashboardPage() {
       const publicUrl =
         `${publicUrlData.publicUrl}?v=${Date.now()}`;
 
-      const { error: profileError } =
+      const {
+        error: profileError,
+      } =
         await supabase
           .from("profiles")
           .update({
@@ -956,6 +950,7 @@ export default function DashboardPage() {
       setSelectedPhotoSource(null);
       setSelectedPhotoFile(null);
       setCropOpen(false);
+
       setCropZoom(1);
       setCropX(0);
       setCropY(0);
@@ -976,8 +971,11 @@ export default function DashboardPage() {
       ) {
         setPhotoError(
           String(
-            (error as { message: string })
-              .message,
+            (
+              error as {
+                message: string;
+              }
+            ).message,
           ),
         );
       } else {
@@ -991,7 +989,7 @@ export default function DashboardPage() {
   };
 
   // ==========================================================
-  // CURRENT STREAK
+  // STREAK
   // ==========================================================
 
   const streakDays =
@@ -1001,7 +999,7 @@ export default function DashboardPage() {
     getStreakMeta(streakDays);
 
   // ==========================================================
-  // WELCOME TYPEWRITER
+  // WELCOME
   // ==========================================================
 
   const welcomeText =
@@ -1119,9 +1117,10 @@ export default function DashboardPage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  setSettingsOpen(true)
-                }
+                onClick={() => {
+                  setNotifOpen(false);
+                  setSettingsOpen(true);
+                }}
               >
                 <span
                   className="e"
@@ -1136,9 +1135,10 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="profile-chip"
-                onClick={() =>
-                  setSettingsOpen(true)
-                }
+                onClick={() => {
+                  setNotifOpen(false);
+                  setSettingsOpen(true);
+                }}
                 aria-label="Open profile settings"
               >
                 {photoPreview ||
@@ -1221,6 +1221,8 @@ export default function DashboardPage() {
 
               <div className="top-actions">
 
+                {/* NOTIFICATION BUTTON */}
+
                 <button
                   type="button"
                   className="icon-btn"
@@ -1231,6 +1233,8 @@ export default function DashboardPage() {
                   }
                   onClick={(e) => {
                     e.stopPropagation();
+
+                    setSettingsOpen(false);
 
                     setNotifOpen(
                       (value) =>
@@ -1255,9 +1259,22 @@ export default function DashboardPage() {
                   )}
                 </button>
 
-                <div
+                {/* PROFILE BUTTON */}
+
+                <button
+                  type="button"
                   className="avatar"
                   aria-label="Profile"
+                  onClick={(e) => {
+                    e.stopPropagation();
+
+                    setNotifOpen(false);
+
+                    setSettingsOpen(
+                      (value) =>
+                        !value,
+                    );
+                  }}
                 >
                   {photoPreview ||
                     user.avatarUrl ? (
@@ -1274,16 +1291,17 @@ export default function DashboardPage() {
                       {initial}
                     </span>
                   )}
-                </div>
+                </button>
 
               </div>
 
             </div>
 
-            {/* NOTIFICATION OVERLAY */}
+            {/* NOTIFICATION POPUP */}
 
             {notifOpen && (
               <div
+                ref={notifRef}
                 className="pop open"
                 role="dialog"
                 aria-label="Notifications"
@@ -1456,8 +1474,6 @@ export default function DashboardPage() {
 
             <div className="grid">
 
-              {/* LEFT */}
-
               <div className="col">
 
                 {/* CONTINUE LEARNING */}
@@ -1532,35 +1548,6 @@ export default function DashboardPage() {
 
                 </section>
 
-                {/* MY COURSES */}
-
-                <div className="sec-head reveal d3">
-
-                  <h2>
-                    My Courses
-                  </h2>
-
-                  <a
-                    className="link"
-                    href="#"
-                  >
-                    View all{" "}
-                    <span aria-hidden="true">
-                      →
-                    </span>
-                  </a>
-
-                </div>
-
-                <section
-                  className="courses-empty reveal d3"
-                  aria-label="My courses"
-                >
-                  <span>
-                    add new course
-                  </span>
-                </section>
-
                 {/* PERFORMANCE */}
 
                 <section
@@ -1569,42 +1556,51 @@ export default function DashboardPage() {
                 >
 
                   <div className="card pad">
+
                     <h3>
                       <span aria-hidden="true">
                         📊
                       </span>
+
                       Your Performance
                     </h3>
 
                     <div className="empty-section">
                       add new course
                     </div>
+
                   </div>
 
                   <div className="card pad">
+
                     <h3>
                       <span aria-hidden="true">
                         ⭐
                       </span>
+
                       Strong Topics
                     </h3>
 
                     <div className="empty-section">
                       add new course
                     </div>
+
                   </div>
 
                   <div className="card pad needs-attention-card">
+
                     <h3 className="warn-title">
                       <span aria-hidden="true">
                         ⚠️
                       </span>
+
                       Needs Attention
                     </h3>
 
                     <div className="empty-section">
                       add new course
                     </div>
+
                   </div>
 
                 </section>
@@ -1622,6 +1618,7 @@ export default function DashboardPage() {
                       <span aria-hidden="true">
                         🗓️
                       </span>
+
                       Upcoming Tests
                     </h3>
 
@@ -1662,109 +1659,12 @@ export default function DashboardPage() {
 
               </div>
 
-              {/* RIGHT */}
-
-              <div className="col">
-
-                {/* COURSE STRUCTURE */}
-
-                <section
-                  className="card side-card reveal d3"
-                  aria-label="Course structure"
-                >
-
-                  <div className="sec-head">
-
-                    <h3>
-                      📖 COURSE STRUCTURE
-                    </h3>
-
-                    <a
-                      className="link"
-                      href="#"
-                    >
-                      Add New Course{" "}
-                      <span aria-hidden="true">
-                        →
-                      </span>
-                    </a>
-
-                  </div>
-
-                  <div className="empty-side-state">
-                    add new course
-                  </div>
-
-                </section>
-
-                {/* DOUBT CLEARER */}
-
-                <section
-                  className="card side-card reveal d4"
-                  aria-label="Doubt clearer"
-                >
-
-                  <div className="sec-head">
-
-                    <h3>
-                      💬 Doubt Clearer
-                    </h3>
-
-                    <small className="badge">
-                      ⚡ AI Powered
-                    </small>
-
-                  </div>
-
-                  <div className="qa empty-qa">
-
-                    <div className="empty-section">
-                      add new course
-                    </div>
-
-                  </div>
-
-                </section>
-
-                {/* RECENT ACTIVITY */}
-
-                <section
-                  className="card side-card reveal d5"
-                  aria-label="Recent activity"
-                >
-
-                  <div className="sec-head">
-
-                    <h3>
-                      🕒 Recent Activity
-                    </h3>
-
-                    <a
-                      className="link"
-                      href="#"
-                    >
-                      View all{" "}
-                      <span aria-hidden="true">
-                        →
-                      </span>
-                    </a>
-
-                  </div>
-
-                  <div className="empty-side-state">
-                    add new course
-                  </div>
-
-                </section>
-
-              </div>
-
             </div>
           </main>
         </div>
 
         {/* ======================================================
-            SETTINGS
+            SETTINGS / PROFILE CONFIGURATION
         ====================================================== */}
 
         {settingsOpen && (
@@ -1781,6 +1681,7 @@ export default function DashboardPage() {
           >
 
             <div
+              ref={settingsRef}
               className="modal"
               role="dialog"
               aria-modal="true"
@@ -1790,6 +1691,7 @@ export default function DashboardPage() {
               <header>
 
                 <div className="set-title">
+
                   <b>
                     Settings
                   </b>
@@ -1799,6 +1701,7 @@ export default function DashboardPage() {
                   <small className="muted-text">
                     {user.email}
                   </small>
+
                 </div>
 
                 <button
@@ -1823,6 +1726,7 @@ export default function DashboardPage() {
                 <div className="settings-profile">
 
                   <div className="settings-avatar">
+
                     {photoPreview ||
                       user.avatarUrl ? (
                       <img
@@ -1838,6 +1742,7 @@ export default function DashboardPage() {
                         {initial}
                       </span>
                     )}
+
                   </div>
 
                   <div>
@@ -1992,6 +1897,7 @@ export default function DashboardPage() {
                 </div>
 
               </div>
+
             </div>
           </div>
         )}
@@ -2036,7 +1942,9 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     className="icon-btn"
-                    onClick={cancelCrop}
+                    onClick={
+                      cancelCrop
+                    }
                     aria-label="Cancel photo editing"
                   >
                     ✕
@@ -2269,8 +2177,8 @@ function TypewriterHeading({
 
     setDisplayed("");
 
-    const timer = window.setInterval(
-      () => {
+    const timer =
+      window.setInterval(() => {
         index += 1;
 
         setDisplayed(
@@ -2280,9 +2188,7 @@ function TypewriterHeading({
         if (index >= text.length) {
           window.clearInterval(timer);
         }
-      },
-      55,
-    );
+      }, 55);
 
     return () =>
       window.clearInterval(timer);
@@ -2291,6 +2197,7 @@ function TypewriterHeading({
   return (
     <>
       {displayed}
+
       <span className="type-cursor">
         |
       </span>
@@ -2322,7 +2229,9 @@ const CSS = `
   --track:#EDE0C6;
   --red:#D92D20;
   --radius:16px;
-  --shadow:0 1px 2px rgba(122,47,0,.06),0 8px 24px rgba(122,47,0,.06)
+  --shadow:
+    0 1px 2px rgba(122,47,0,.06),
+    0 8px 24px rgba(122,47,0,.06)
 }
 
 [data-theme="dark"]{
@@ -2336,7 +2245,8 @@ const CSS = `
   --muted:#A68A65;
   --icon-bg:#35220F;
   --track:#3A2A18;
-  --shadow:0 1px 2px rgba(0,0,0,.4)
+  --shadow:
+    0 1px 2px rgba(0,0,0,.4)
 }
 
 *{
@@ -2353,7 +2263,16 @@ body{
 }
 
 .lm{
-  font-family:'Inter',system-ui,-apple-system,'SF Pro Text',Segoe UI,Roboto,Arial,sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    'SF Pro Text',
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
+
   background:var(--bg);
   color:var(--text);
   min-height:100vh;
@@ -2385,7 +2304,9 @@ body{
   min-height:100vh
 }
 
-/* SIDEBAR */
+/* ============================================================
+   SIDEBAR
+============================================================ */
 
 .lm .sidebar{
   width:236px;
@@ -2446,13 +2367,17 @@ body{
 
 .lm .nav a.active{
   background:rgba(233,198,137,.18);
-  box-shadow:inset 0 0 0 1px rgba(233,198,137,.18);
+  box-shadow:
+    inset 0 0 0 1px
+    rgba(233,198,137,.18);
   font-weight:600
 }
 
 .lm .side-foot{
   margin-top:auto;
-  border-top:1px solid rgba(233,198,137,.22);
+  border-top:
+    1px solid
+    rgba(233,198,137,.22);
   padding-top:10px;
   display:flex;
   flex-direction:column;
@@ -2515,7 +2440,9 @@ body{
   font-size:12px
 }
 
-/* MAIN */
+/* ============================================================
+   MAIN
+============================================================ */
 
 .lm .main{
   flex:1;
@@ -2547,7 +2474,11 @@ body{
 
 .lm .type-cursor{
   opacity:.45;
-  animation:cursorBlink 1s steps(1) infinite
+  animation:
+    cursorBlink
+    1s
+    steps(1)
+    infinite
 }
 
 @keyframes cursorBlink{
@@ -2618,7 +2549,8 @@ body{
   place-items:center;
   font-weight:800;
   color:var(--brown-900);
-  font-size:18px
+  font-size:18px;
+  padding:0
 }
 
 .lm .avatar img{
@@ -2627,19 +2559,30 @@ body{
   object-fit:cover
 }
 
-/* NOTIFICATIONS */
+/* ============================================================
+   NOTIFICATIONS
+============================================================ */
 
 .lm .pop{
   position:fixed;
   top:78px;
   right:24px;
-  width:min(320px,calc(100vw - 32px));
-  max-height:min(420px,calc(100vh - 100px));
+  width:min(
+    320px,
+    calc(100vw - 32px)
+  );
+  max-height:
+    min(
+      420px,
+      calc(100vh - 100px)
+    );
   overflow:auto;
   background:var(--card);
   border:1px solid var(--border);
   border-radius:16px;
-  box-shadow:0 12px 32px rgba(74,30,0,.18);
+  box-shadow:
+    0 12px 32px
+    rgba(74,30,0,.18);
   padding:12px;
   z-index:150;
   animation:fadeIn .18s ease
@@ -2668,11 +2611,14 @@ body{
   padding:10px
 }
 
-/* STATS */
+/* ============================================================
+   STATS
+============================================================ */
 
 .lm .stats{
   display:grid;
-  grid-template-columns:repeat(4,1fr);
+  grid-template-columns:
+    repeat(4,1fr);
   gap:14px;
   margin:20px 0 14px
 }
@@ -2774,11 +2720,13 @@ body{
   font-size:13px
 }
 
-/* GRID */
+/* ============================================================
+   GRID
+============================================================ */
 
 .lm .grid{
   display:grid;
-  grid-template-columns:1fr 375px;
+  grid-template-columns:1fr;
   gap:14px;
   align-items:start
 }
@@ -2790,7 +2738,9 @@ body{
   min-width:0
 }
 
-/* HERO */
+/* ============================================================
+   HERO
+============================================================ */
 
 .lm .hero{
   background:var(--brown-900);
@@ -2828,7 +2778,9 @@ body{
   height:104px;
   border-radius:14px;
   background:#2b1608;
-  border:1px solid rgba(233,198,137,.3);
+  border:
+    1px solid
+    rgba(233,198,137,.3);
   display:grid;
   place-items:center;
   font-size:34px;
@@ -2859,7 +2811,8 @@ body{
 
 .lm .bar{
   height:8px;
-  background:rgba(255,255,255,.18);
+  background:
+    rgba(255,255,255,.18);
   border-radius:999px;
   margin-top:10px;
   overflow:hidden
@@ -2871,7 +2824,9 @@ body{
   width:0;
   background:#F5E7CC;
   border-radius:999px;
-  transition:width 1.2s cubic-bezier(.22,1,.36,1)
+  transition:
+    width 1.2s
+    cubic-bezier(.22,1,.36,1)
 }
 
 .lm .hero-meta{
@@ -2886,7 +2841,9 @@ body{
   margin-left:auto
 }
 
-/* BUTTONS */
+/* ============================================================
+   BUTTONS
+============================================================ */
 
 .lm .btn-cream{
   background:#FBF2DF;
@@ -2929,7 +2886,9 @@ body{
   justify-content:center
 }
 
-/* SECTION HEAD */
+/* ============================================================
+   SECTION HEAD
+============================================================ */
 
 .lm .sec-head{
   display:flex;
@@ -2937,11 +2896,6 @@ body{
   justify-content:space-between;
   gap:10px;
   min-width:0
-}
-
-.lm .sec-head h2{
-  font-size:19px;
-  font-weight:800
 }
 
 .lm .sec-head h3{
@@ -2959,30 +2913,14 @@ body{
   white-space:nowrap
 }
 
-/* COURSES */
-
-.lm .courses-empty{
-  min-height:110px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border:1px dashed var(--border);
-  border-radius:var(--radius);
-  color:var(--text);
-  opacity:.6;
-  background:var(--card);
-  min-width:0
-}
-
-.lm .courses-empty span{
-  font-size:14px
-}
-
-/* PERFORMANCE */
+/* ============================================================
+   PERFORMANCE
+============================================================ */
 
 .lm .perf3{
   display:grid;
-  grid-template-columns:1.35fr .85fr .85fr;
+  grid-template-columns:
+    1.35fr .85fr .85fr;
   gap:14px;
   min-width:0
 }
@@ -3013,7 +2951,9 @@ body{
   overflow-wrap:anywhere
 }
 
-/* JOURNEY */
+/* ============================================================
+   JOURNEY
+============================================================ */
 
 .lm .journey{
   display:flex;
@@ -3025,51 +2965,15 @@ body{
   color:var(--text-2)
 }
 
-/* RIGHT SIDE */
-
-.lm .side-card{
-  padding:16px;
-  min-width:0
-}
-
-.lm .badge{
-  background:var(--icon-bg);
-  padding:5px 10px;
-  border-radius:999px;
-  font-size:11px;
-  font-weight:600;
-  white-space:nowrap
-}
-
-.lm .empty-side-state{
-  min-height:90px;
-  display:grid;
-  place-items:center;
-  color:var(--text);
-  opacity:.6;
-  font-size:13px
-}
-
-.lm .qa{
-  background:var(--card-2);
-  border:1px solid var(--border-soft);
-  border-radius:12px;
-  padding:12px;
-  margin-top:10px
-}
-
-.lm .empty-qa{
-  min-height:100px;
-  display:grid;
-  place-items:center
-}
-
-/* SETTINGS */
+/* ============================================================
+   SETTINGS
+============================================================ */
 
 .lm .modal-back{
   position:fixed;
   inset:0;
-  background:rgba(40,18,0,.45);
+  background:
+    rgba(40,18,0,.45);
   display:grid;
   place-items:center;
   z-index:180;
@@ -3086,12 +2990,15 @@ body{
   background:var(--card);
   border:1px solid var(--border);
   border-radius:20px;
-  animation:fadeUp .35s ease forwards
+  animation:
+    fadeUp .35s ease forwards
 }
 
 .lm .modal header{
   padding:16px 18px;
-  border-bottom:1px solid var(--border-soft);
+  border-bottom:
+    1px solid
+    var(--border-soft);
   display:flex;
   gap:10px;
   align-items:center
@@ -3175,7 +3082,9 @@ body{
   height:24px;
   border-radius:50%;
   background:#fff;
-  box-shadow:0 1px 2px rgba(0,0,0,.3)
+  box-shadow:
+    0 1px 2px
+    rgba(0,0,0,.3)
 }
 
 .lm .toggle[aria-checked="true"]{
@@ -3186,7 +3095,9 @@ body{
   left:23px
 }
 
-/* SETTINGS PROFILE */
+/* ============================================================
+   SETTINGS PROFILE
+============================================================ */
 
 .lm .settings-profile{
   display:flex;
@@ -3227,7 +3138,9 @@ body{
   margin-top:3px
 }
 
-/* PHOTO UPLOAD */
+/* ============================================================
+   PHOTO UPLOAD
+============================================================ */
 
 .lm .photo-file-input{
   display:none
@@ -3266,13 +3179,16 @@ body{
   margin-top:7px
 }
 
-/* PHOTO CROP */
+/* ============================================================
+   PHOTO CROP
+============================================================ */
 
 .lm .crop-back{
   position:fixed;
   inset:0;
   z-index:250;
-  background:rgba(40,18,0,.58);
+  background:
+    rgba(40,18,0,.58);
   display:grid;
   place-items:center;
   padding:16px;
@@ -3282,13 +3198,16 @@ body{
 
 .lm .crop-modal{
   width:min(520px,100%);
-  max-height:calc(100dvh - 32px);
+  max-height:
+    calc(100dvh - 32px);
   overflow:auto;
   overscroll-behavior:contain;
   background:var(--card);
   border:1px solid var(--border);
   border-radius:22px;
-  box-shadow:0 20px 60px rgba(40,18,0,.28)
+  box-shadow:
+    0 20px 60px
+    rgba(40,18,0,.28)
 }
 
 .lm .crop-header{
@@ -3296,7 +3215,9 @@ body{
   align-items:center;
   gap:12px;
   padding:16px 18px;
-  border-bottom:1px solid var(--border-soft)
+  border-bottom:
+    1px solid
+    var(--border-soft)
 }
 
 .lm .crop-header > div{
@@ -3325,15 +3246,15 @@ body{
   overflow:hidden;
   background:#2B1608;
   border:4px solid var(--cream);
-  box-shadow:0 0 0 1px var(--border);
+  box-shadow:
+    0 0 0 1px
+    var(--border)
 }
 
 .lm .crop-window{
   position:absolute;
   inset:0;
-  background-repeat:no-repeat;
-  background-position:center;
-  background-size:100%;
+  background-repeat:no-repeat
 }
 
 .lm .crop-circle{
@@ -3343,7 +3264,9 @@ body{
   place-items:center;
   color:transparent;
   border-radius:50%;
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)
+  box-shadow:
+    inset 0 0 0 1px
+    rgba(255,255,255,.2)
 }
 
 .lm .crop-controls{
@@ -3376,7 +3299,9 @@ body{
   grid-template-columns:1fr 1.4fr;
   gap:10px;
   padding:16px 18px;
-  border-top:1px solid var(--border-soft)
+  border-top:
+    1px solid
+    var(--border-soft)
 }
 
 .lm .crop-cancel,
@@ -3396,13 +3321,16 @@ body{
   color:#FFF6E3
 }
 
-/* FIRST LOGIN */
+/* ============================================================
+   FIRST LOGIN
+============================================================ */
 
 .lm .name-setup-back{
   position:fixed;
   inset:0;
   z-index:200;
-  background:rgba(40,18,0,.45);
+  background:
+    rgba(40,18,0,.45);
   display:grid;
   place-items:center;
   padding:20px;
@@ -3416,7 +3344,9 @@ body{
   border:1px solid var(--border);
   border-radius:22px;
   padding:30px;
-  box-shadow:0 20px 60px rgba(74,30,0,.18);
+  box-shadow:
+    0 20px 60px
+    rgba(74,30,0,.18);
   text-align:center
 }
 
@@ -3463,12 +3393,15 @@ body{
   margin-top:10px
 }
 
-/* ANIMATION */
+/* ============================================================
+   ANIMATION
+============================================================ */
 
 .lm .reveal{
   opacity:0;
   transform:translateY(8px);
-  animation:fadeUp .55s ease forwards
+  animation:
+    fadeUp .55s ease forwards
 }
 
 @keyframes fadeUp{
@@ -3541,36 +3474,42 @@ body{
   }
 }
 
-/* TABLET */
+/* ============================================================
+   TABLET
+============================================================ */
 
 @media(max-width:1100px){
 
   .lm .stats{
-    grid-template-columns:repeat(2,1fr)
-  }
-
-  .lm .grid{
-    grid-template-columns:1fr
+    grid-template-columns:
+      repeat(2,1fr)
   }
 
   .lm .perf3{
-    grid-template-columns:repeat(3,minmax(0,1fr))
+    grid-template-columns:
+      repeat(3,minmax(0,1fr))
   }
 }
 
-/* PHONE */
+/* ============================================================
+   PHONE
+============================================================ */
 
 @media(max-width:860px){
 
   .lm .sidebar{
     transform:translateX(-105%);
-    transition:transform .28s ease;
-    border-radius:0 20px 20px 0
+    transition:
+      transform .28s ease;
+    border-radius:
+      0 20px 20px 0
   }
 
   .lm .sidebar.open{
     transform:none;
-    box-shadow:0 0 60px rgba(0,0,0,.35)
+    box-shadow:
+      0 0 60px
+      rgba(0,0,0,.35)
   }
 
   .lm .main{
@@ -3615,7 +3554,8 @@ body{
   .lm .scrim{
     position:fixed;
     inset:0;
-    background:rgba(0,0,0,.35);
+    background:
+      rgba(0,0,0,.35);
     z-index:40;
     display:none
   }
@@ -3625,7 +3565,8 @@ body{
   }
 
   .lm .stats{
-    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-columns:
+      repeat(2,minmax(0,1fr));
     gap:10px
   }
 
@@ -3638,12 +3579,9 @@ body{
     font-size:18px
   }
 
-  /* IMPORTANT MOBILE FIX:
-     Needs Attention no longer gets squeezed off screen. */
-
   .lm .perf3{
     grid-template-columns:1fr;
-    width:100%;
+    width:100%
   }
 
   .lm .perf3 > .card{
@@ -3668,7 +3606,8 @@ body{
   .lm .pop{
     top:72px;
     right:12px;
-    width:calc(100vw - 24px);
+    width:
+      calc(100vw - 24px);
     max-height:70vh
   }
 
@@ -3681,7 +3620,9 @@ body{
   }
 }
 
-/* SMALL PHONES */
+/* ============================================================
+   SMALL PHONES
+============================================================ */
 
 @media(max-width:520px){
 

@@ -2718,24 +2718,16 @@ export default function DashboardPage() {
                         <button
                           type="button"
                           className="btn-cream bordered"
-                          onClick={
-                            saveSettings
-                          }
-                          disabled={
-                            settingsSaving
-                          }
+                          onClick={saveSettings}
+                          disabled={settingsSaving}
                         >
-                          {settingsSaving
-                            ? "Saving..."
-                            : "Save"}
+                          {settingsSaving ? "Saving..." : "Save"}
                         </button>
 
                         <button
                           type="button"
                           className="btn-brown centered"
-                          onClick={
-                            requestLogout
-                          }
+                          onClick={requestLogout}
                         >
                           Log out
                         </button>
@@ -2745,623 +2737,432 @@ export default function DashboardPage() {
                 )}
 
               {/* ==================================================
-                  CHANGE NAME VIEW
-              ================================================== */}
+                    CHANGE NAME VIEW
+                ================================================== */}
+              {settingsView === "name" && (
+                <div className="settings-change-view">
+                  <header>
+                    <button
+                      type="button"
+                      className="settings-back"
+                      onClick={() => setSettingsView("main")}
+                    >
+                      ← Back
+                    </button>
 
-              {settingsView ===
-                "name" && (
-                  <div className="settings-change-view">
-                    <header>
-                      <button
-                        type="button"
-                        className="settings-back"
-                        onClick={() =>
-                          setSettingsView(
-                            "main",
-                          )
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        setSettingsView("main");
+                      }}
+                      aria-label="Close settings"
+                    >
+                      ✕
+                    </button>
+                  </header>
+
+                  <div className="settings-change-content">
+                    <h2>
+                      <TypewriterHeading text="Set your new LearnMate name" />
+                    </h2>
+
+                    <p>
+                      Choose the name you want LearnMate to use when
+                      welcoming you.
+                    </p>
+
+                    <input
+                      autoFocus
+                      value={nameDraft}
+                      onChange={(e) => {
+                        setNameDraft(e.target.value);
+                        setSettingsError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !settingsSaving) {
+                          changeLearnMateName();
                         }
-                      >
-                        ← Back
-                      </button>
+                      }}
+                      placeholder="Enter your new name"
+                      maxLength={40}
+                    />
 
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        onClick={() => {
-                          setSettingsOpen(
-                            false,
-                          );
-
-                          setSettingsView(
-                            "main",
-                          );
-                        }}
-                        aria-label="Close settings"
-                      >
-                        ✕
-                      </button>
-                    </header>
-
-                    <div className="settings-change-content">
-                      <h2>
-                        <TypewriterHeading
-                          text="Set your new LearnMate name"
-                        />
-                      </h2>
-
-                      <p>
-                        Choose the name
-                        you want
-                        LearnMate to use
-                        when welcoming
-                        you.
-                      </p>
-
-                      <input
-                        autoFocus
-                        value={
-                          nameDraft
-                        }
-                        onChange={(e) => {
-                          setNameDraft(
-                            e.target
-                              .value,
-                          );
-
-                          setSettingsError(
-                            "",
-                          );
-                        }}
-                        onKeyDown={(e) => {
-                          if (
-                            e.key ===
-                            "Enter" &&
-                            !settingsSaving
-                          ) {
-                            changeLearnMateName();
-                          }
-                        }}
-                        placeholder="Enter your new name"
-                        maxLength={40}
-                      />
-
-                      <button
-                        type="button"
-                        className="btn-brown name-save"
-                        onClick={
-                          changeLearnMateName
-                        }
-                        disabled={
-                          settingsSaving
-                        }
-                      >
-                        {settingsSaving
-                          ? "Saving..."
-                          : "Save name"}
-
-                        {!settingsSaving && (
-                          <span aria-hidden="true">
-                            →
-                          </span>
-                        )}
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className="btn-brown name-save"
+                      onClick={changeLearnMateName}
+                      disabled={settingsSaving}
+                    >
+                      {settingsSaving ? "Saving..." : "Save name"}
+                      {!settingsSaving && (
+                        <span aria-hidden="true">→</span>
+                      )}
+                    </button>
                   </div>
-                )}
+                </div>
+              )}
 
               {/* ==================================================
-                  CHANGE EMAIL VIEW
-              ================================================== */}
+                    CHANGE EMAIL VIEW
+                ================================================== */}
+              {settingsView === "email" && (
+                <div className="settings-change-view">
+                  <header>
+                    <button
+                      type="button"
+                      className="settings-back"
+                      onClick={() => setSettingsView("main")}
+                    >
+                      ← Back
+                    </button>
 
-              {settingsView ===
-                "email" && (
-                  <div className="settings-change-view">
-                    <header>
-                      <button
-                        type="button"
-                        className="settings-back"
-                        onClick={() =>
-                          setSettingsView(
-                            "main",
-                          )
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        setSettingsView("main");
+                      }}
+                      aria-label="Close settings"
+                    >
+                      ✕
+                    </button>
+                  </header>
+
+                  <div className="settings-change-content">
+                    <h2>
+                      <TypewriterHeading text="Enter your new email" />
+                    </h2>
+
+                    <p>
+                      Enter the email address you want to use with your
+                      LearnMate account.
+                    </p>
+
+                    <input
+                      autoFocus
+                      type="email"
+                      value={emailDraft}
+                      onChange={(e) => {
+                        setEmailDraft(e.target.value);
+                        setSettingsError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !settingsSaving) {
+                          changeEmail();
                         }
-                      >
-                        ← Back
-                      </button>
+                      }}
+                      placeholder="Enter your new email"
+                      maxLength={120}
+                    />
 
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        onClick={() => {
-                          setSettingsOpen(
-                            false,
-                          );
+                    <p className="email-change-note">
+                      You may need to confirm the new email from your inbox.
+                    </p>
 
-                          setSettingsView(
-                            "main",
-                          );
-                        }}
-                        aria-label="Close settings"
-                      >
-                        ✕
-                      </button>
-                    </header>
-
-                    <div className="settings-change-content">
-                      <h2>
-                        <TypewriterHeading
-                          text="Enter your new email"
-                        />
-                      </h2>
-
-                      <p>
-                        Enter the email
-                        address you want
-                        to use with your
-                        LearnMate account.
-                      </p>
-
-                      <input
-                        autoFocus
-                        type="email"
-                        value={
-                          emailDraft
-                        }
-                        onChange={(e) => {
-                          setEmailDraft(
-                            e.target
-                              .value,
-                          );
-
-                          setSettingsError(
-                            "",
-                          );
-                        }}
-                        onKeyDown={(e) => {
-                          if (
-                            e.key ===
-                            "Enter" &&
-                            !settingsSaving
-                          ) {
-                            changeEmail();
-                          }
-                        }}
-                        placeholder="Enter your new email"
-                        maxLength={120}
-                      />
-
-                      <p className="email-change-note">
-                        You may need to
-                        confirm the new
-                        email from your
-                        inbox.
-                      </p>
-
-                      <button
-                        type="button"
-                        className="btn-brown name-save"
-                        onClick={
-                          changeEmail
-                        }
-                        disabled={
-                          settingsSaving
-                        }
-                      >
-                        {settingsSaving
-                          ? "Updating..."
-                          : "Change email"}
-
-                        {!settingsSaving && (
-                          <span aria-hidden="true">
-                            →
-                          </span>
-                        )}
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className="btn-brown name-save"
+                      onClick={changeEmail}
+                      disabled={settingsSaving}
+                    >
+                      {settingsSaving ? "Updating..." : "Change email"}
+                      {!settingsSaving && (
+                        <span aria-hidden="true">→</span>
+                      )}
+                    </button>
                   </div>
-                )}
+                </div>
+              )}
             </div>
           </div>
         )}
-
-        {/* ======================================================
-            PHOTO CROP
-        ====================================================== */}
-
-        {cropOpen &&
-          selectedPhotoSource && (
-            <div
-              className="crop-back"
-              onClick={(e) => {
-                if (
-                  e.target ===
-                  e.currentTarget
-                ) {
-                  cancelCrop();
-                }
-              }}
-            >
-              <div
-                className="crop-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Crop profile photo"
-              >
-                <header className="crop-header">
-                  <div>
-                    <b>
-                      Adjust profile
-                      photo
-                    </b>
-
-                    <small>
-                      Crop and resize
-                      before saving
-                    </small>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    onClick={
-                      cancelCrop
-                    }
-                    aria-label="Cancel photo editing"
-                  >
-                    ✕
-                  </button>
-                </header>
-
-                <div className="crop-preview">
-                  <div
-                    className="crop-window"
-                    style={{
-                      backgroundImage:
-                        `url("${selectedPhotoSource}")`,
-                      backgroundPosition:
-                        `calc(50% + ${cropX}%) calc(50% + ${cropY}%)`,
-                      backgroundSize:
-                        `${cropZoom * 100}%`,
-                    }}
-                  />
-
-                  <span className="crop-circle">
-                    Profile
-                  </span>
-                </div>
-
-                <div className="crop-controls">
-                  <label>
-                    <span>
-                      Zoom
-                    </span>
-
-                    <input
-                      type="range"
-                      min="1"
-                      max="3"
-                      step="0.01"
-                      value={
-                        cropZoom
-                      }
-                      onChange={(e) =>
-                        setCropZoom(
-                          Number(
-                            e.target
-                              .value,
-                          ),
-                        )
-                      }
-                    />
-                  </label>
-
-                  <label>
-                    <span>
-                      Horizontal
-                    </span>
-
-                    <input
-                      type="range"
-                      min="-25"
-                      max="25"
-                      step="1"
-                      value={cropX}
-                      onChange={(e) =>
-                        setCropX(
-                          Number(
-                            e.target
-                              .value,
-                          ),
-                        )
-                      }
-                    />
-                  </label>
-
-                  <label>
-                    <span>
-                      Vertical
-                    </span>
-
-                    <input
-                      type="range"
-                      min="-25"
-                      max="25"
-                      step="1"
-                      value={cropY}
-                      onChange={(e) =>
-                        setCropY(
-                          Number(
-                            e.target
-                              .value,
-                          ),
-                        )
-                      }
-                    />
-                  </label>
-                </div>
-
-                <img
-                  ref={
-                    photoImageRef
-                  }
-                  src={
-                    selectedPhotoSource
-                  }
-                  alt=""
-                  className="crop-hidden-image"
-                />
-
-                <div className="crop-actions">
-                  <button
-                    type="button"
-                    className="crop-cancel"
-                    onClick={
-                      cancelCrop
-                    }
-                    disabled={
-                      photoSaving
-                    }
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="button"
-                    className="crop-save"
-                    onClick={
-                      finalizePhoto
-                    }
-                    disabled={
-                      photoSaving
-                    }
-                  >
-                    {photoSaving
-                      ? "Saving..."
-                      : "Use this photo"}
-                  </button>
-                </div>
+      {/* ============================================================
+            PHOTO CROP MODAL
+        ============================================================ */}
+      {cropOpen && selectedPhotoSource && (
+        <div
+          className="crop-back"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              cancelCrop();
+            }
+          }}
+        >
+          <div
+            className="crop-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Crop profile photo"
+          >
+            <header className="crop-header">
+              <div>
+                <b>Adjust profile photo</b>
+                <small>Crop and resize before saving</small>
               </div>
-            </div>
-          )}
-
-        {/* ======================================================
-            FIRST LOGIN NAME SETUP
-        ====================================================== */}
-
-        {needsNameSetup && (
-          <div className="name-setup-back">
-            <div
-              className="name-setup reveal"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Set your LearnMate name"
-            >
-              <h2>
-                <TypewriterHeading
-                  text="Set your LearnMate name"
-                />
-              </h2>
-
-              <p>
-                Choose the name you
-                want LearnMate to use
-                when welcoming you.
-              </p>
-
-              <input
-                autoFocus
-                value={nameDraft}
-                onChange={(e) => {
-                  setNameDraft(
-                    e.target.value,
-                  );
-
-                  if (nameError) {
-                    setNameError(
-                      "",
-                    );
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (
-                    e.key ===
-                    "Enter" &&
-                    !nameSaving
-                  ) {
-                    saveLearnMateName();
-                  }
-                }}
-                placeholder="Enter your name"
-                maxLength={40}
-              />
-
-              {nameError && (
-                <p className="name-error">
-                  {nameError}
-                </p>
-              )}
 
               <button
                 type="button"
-                className="btn-brown name-save"
-                onClick={
-                  saveLearnMateName
-                }
-                disabled={
-                  nameSaving
-                }
+                className="icon-btn"
+                onClick={cancelCrop}
+                aria-label="Cancel photo editing"
               >
-                {nameSaving
-                  ? "Saving..."
-                  : "Continue"}
+                ✕
+              </button>
+            </header>
 
-                {!nameSaving && (
-                  <span aria-hidden="true">
-                    →
-                  </span>
-                )}
+            <div className="crop-preview">
+              <div
+                className="crop-window"
+                style={{
+                  backgroundImage: `url("${selectedPhotoSource}")`,
+                  backgroundPosition:
+                    `calc(50% + ${cropX}%) calc(50% + ${cropY}%)`,
+                  backgroundSize: `${cropZoom * 100}%`,
+                }}
+              />
+
+              <span className="crop-circle">Profile</span>
+            </div>
+
+            <div className="crop-controls">
+              <label>
+                <span>Zoom</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.01"
+                  value={cropZoom}
+                  onChange={(e) =>
+                    setCropZoom(Number(e.target.value))
+                  }
+                />
+              </label>
+
+              <label>
+                <span>Horizontal</span>
+                <input
+                  type="range"
+                  min="-25"
+                  max="25"
+                  step="1"
+                  value={cropX}
+                  onChange={(e) =>
+                    setCropX(Number(e.target.value))
+                  }
+                />
+              </label>
+
+              <label>
+                <span>Vertical</span>
+                <input
+                  type="range"
+                  min="-25"
+                  max="25"
+                  step="1"
+                  value={cropY}
+                  onChange={(e) =>
+                    setCropY(Number(e.target.value))
+                  }
+                />
+              </label>
+            </div>
+
+            <img
+              ref={photoImageRef}
+              src={selectedPhotoSource}
+              alt=""
+              className="crop-hidden-image"
+            />
+
+            <div className="crop-actions">
+              <button
+                type="button"
+                className="crop-cancel"
+                onClick={cancelCrop}
+                disabled={photoSaving}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="crop-save"
+                onClick={finalizePhoto}
+                disabled={photoSaving}
+              >
+                {photoSaving ? "Saving..." : "Use this photo"}
               </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ======================================================
-            CONFIRMATION MODAL
-        ====================================================== */}
-
-        {confirmAction && (
+      {/* ============================================================
+            FIRST LOGIN NAME SETUP
+        ============================================================ */}
+      {needsNameSetup && (
+        <div className="name-setup-back">
           <div
-            className="confirm-back"
-            onClick={(e) => {
-              if (
-                e.target ===
-                e.currentTarget
-              ) {
-                if (
-                  !accountActionLoading
-                ) {
-                  setConfirmAction(
-                    null,
-                  );
-                }
-              }
-            }}
+            className="name-setup reveal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Set your LearnMate name"
           >
-            <div
-              className={
-                confirmAction ===
-                  "delete"
-                  ? "confirm-modal danger-confirm"
-                  : "confirm-modal"
-              }
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="confirm-title"
-            >
-              <div className="confirm-icon">
-                {confirmAction ===
-                  "delete"
-                  ? "!"
-                  : "?"}
-              </div>
+            <h2>
+              <TypewriterHeading text="Set your LearnMate name" />
+            </h2>
 
-              <h2 id="confirm-title">
-                {confirmAction ===
-                  "delete"
-                  ? "Delete your account?"
-                  : "Log out of LearnMate?"}
-              </h2>
+            <p>
+              Choose the name you want LearnMate to use when welcoming you.
+            </p>
 
-              <p>
-                {confirmAction ===
-                  "delete"
-                  ? "This will permanently delete your LearnMate account. You will not be able to sign in to this deleted account again."
-                  : "Are you sure you want to log out of your LearnMate account?"}
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => {
+                setNameDraft(e.target.value);
+
+                if (nameError) {
+                  setNameError("");
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !nameSaving) {
+                  saveLearnMateName();
+                }
+              }}
+              placeholder="Enter your name"
+              maxLength={40}
+            />
+
+            {nameError && (
+              <p className="name-error">
+                {nameError}
               </p>
+            )}
 
-              {confirmAction ===
-                "delete" && (
-                  <p className="confirm-warning">
-                    This action cannot be
-                    undone.
-                  </p>
-                )}
+            <button
+              type="button"
+              className="btn-brown name-save"
+              onClick={saveLearnMateName}
+              disabled={nameSaving}
+            >
+              {nameSaving ? "Saving..." : "Continue"}
 
-              <div className="confirm-actions">
-                <button
-                  type="button"
-                  className="confirm-cancel"
-                  onClick={() =>
-                    setConfirmAction(
-                      null,
-                    )
-                  }
-                  disabled={
-                    accountActionLoading
-                  }
-                >
-                  Cancel
-                </button>
+              {!nameSaving && (
+                <span aria-hidden="true">→</span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
-                <button
-                  type="button"
-                  className={
-                    confirmAction ===
-                      "delete"
-                      ? "confirm-danger"
-                      : "confirm-primary"
-                  }
-                  onClick={
-                    confirmAction ===
-                      "delete"
-                      ? handleDeleteAccount
-                      : handleLogout
-                  }
-                  disabled={
-                    accountActionLoading
-                  }
-                >
-                  {accountActionLoading
-                    ? confirmAction ===
-                      "delete"
-                      ? "Deleting..."
-                      : "Logging out..."
-                    : confirmAction ===
-                      "delete"
-                      ? "Delete account"
-                      : "Log out"}
-                </button>
-              </div>
+      {/* ============================================================
+            CONFIRMATION MODAL
+        ============================================================ */}
+      {confirmAction && (
+        <div
+          className="confirm-back"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              if (!accountActionLoading) {
+                setConfirmAction(null);
+              }
+            }
+          }}
+        >
+          <div
+            className={
+              confirmAction === "delete"
+                ? "confirm-modal danger-confirm"
+                : "confirm-modal"
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+          >
+            <div className="confirm-icon">
+              {confirmAction === "delete" ? "!" : "?"}
+            </div>
+
+            <h2 id="confirm-title">
+              {confirmAction === "delete"
+                ? "Delete your account?"
+                : "Log out of LearnMate?"}
+            </h2>
+
+            <p>
+              {confirmAction === "delete"
+                ? "This will permanently delete your LearnMate account. You will not be able to sign in to this deleted account again."
+                : "Are you sure you want to log out of your LearnMate account?"}
+            </p>
+
+            {confirmAction === "delete" && (
+              <p className="confirm-warning">
+                This action cannot be undone.
+              </p>
+            )}
+
+            <div className="confirm-actions">
+              <button
+                type="button"
+                className="confirm-cancel"
+                onClick={() => setConfirmAction(null)}
+                disabled={accountActionLoading}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className={
+                  confirmAction === "delete"
+                    ? "confirm-danger"
+                    : "confirm-primary"
+                }
+                onClick={
+                  confirmAction === "delete"
+                    ? handleDeleteAccount
+                    : handleLogout
+                }
+                disabled={accountActionLoading}
+              >
+                {accountActionLoading
+                  ? confirmAction === "delete"
+                    ? "Deleting..."
+                    : "Logging out..."
+                  : confirmAction === "delete"
+                    ? "Delete account"
+                    : "Log out"}
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ======================================================
+      {/* ============================================================
             TOAST
-        ====================================================== */}
+        ============================================================ */}
+      {toast && (
+        <div
+          className={`lm-toast ${toast.type === "success"
+              ? "success"
+              : "error"
+            }`}
+          role="alert"
+        >
+          <span className="toast-icon">
+            {toast.type === "success" ? "✓" : "!"}
+          </span>
 
-        {toast && (
-          <div
-            className={`lm-toast ${toast.type ===
-                "success"
-                ? "success"
-                : "error"
-              }`}
-            role="alert"
-          >
-            <span className="toast-icon">
-              {toast.type ===
-                "success"
-                ? "✓"
-                : "!"}
-            </span>
-
-            <span>
-              {toast.message}
-            </span>
-          </div>
-        )}
-      </div>
+          <span>{toast.message}</span>
+        </div>
+      )}
+    </div >
     </>
   );
 }
@@ -3375,53 +3176,36 @@ function TypewriterHeading({
 }: {
   text: string;
 }) {
-  const [displayed, setDisplayed] =
-    useState("");
+  const [displayed, setDisplayed] = useState("");
 
   useEffect(() => {
     let index = 0;
 
     setDisplayed("");
 
-    const timer =
-      window.setInterval(() => {
-        index += 1;
+    const timer = window.setInterval(() => {
+      index += 1;
 
-        setDisplayed(
-          text.slice(
-            0,
-            index,
-          ),
-        );
+      setDisplayed(text.slice(0, index));
 
-        if (
-          index >= text.length
-        ) {
-          window.clearInterval(
-            timer,
-          );
-        }
-      }, 55);
+      if (index >= text.length) {
+        window.clearInterval(timer);
+      }
+    }, 55);
 
-    return () =>
-      window.clearInterval(
-        timer,
-      );
+    return () => window.clearInterval(timer);
   }, [text]);
 
   return (
     <>
       {displayed}
-
-      <span className="type-cursor">
-        |
-      </span>
+      <span className="type-cursor">|</span>
     </>
   );
 }
 
 /* ============================================================
-   STYLES
+   CSS
 ============================================================ */
 
 const CSS = `
@@ -3478,15 +3262,7 @@ body{
 }
 
 .lm{
-  font-family:
-    'Inter',
-    system-ui,
-    -apple-system,
-    'SF Pro Text',
-    Segoe UI,
-    Roboto,
-    Arial,
-    sans-serif;
+  font-family:'Inter',system-ui,-apple-system,'SF Pro Text',Segoe UI,Roboto,Arial,sans-serif;
   background:var(--bg);
   color:var(--text);
   min-height:100vh;
@@ -3586,17 +3362,13 @@ body{
 
 .lm .nav a.active{
   background:rgba(233,198,137,.18);
-  box-shadow:
-    inset 0 0 0 1px
-    rgba(233,198,137,.18);
+  box-shadow:inset 0 0 0 1px rgba(233,198,137,.18);
   font-weight:600
 }
 
 .lm .side-foot{
   margin-top:auto;
-  border-top:
-    1px solid
-    rgba(233,198,137,.22);
+  border-top:1px solid rgba(233,198,137,.22);
   padding-top:10px;
   display:flex;
   flex-direction:column;
@@ -3668,7 +3440,7 @@ body{
   flex:1;
   margin-left:236px;
   min-width:0;
-  padding:28px 28px 28px;
+  padding:28px;
   max-width:1360px
 }
 
@@ -3694,11 +3466,7 @@ body{
 
 .lm .type-cursor{
   opacity:.45;
-  animation:
-    cursorBlink
-    1s
-    steps(1)
-    infinite
+  animation:cursorBlink 1s steps(1) infinite
 }
 
 @keyframes cursorBlink{
@@ -3780,7 +3548,7 @@ body{
 }
 
 /* ============================================================
-   DESKTOP THEME TOGGLE
+   DESKTOP THEME SWITCH
 ============================================================ */
 
 .lm .desktop-theme-toggle{
@@ -3823,8 +3591,7 @@ body{
   place-items:center;
   font-size:13px;
   flex-shrink:0;
-  box-shadow:
-    0 2px 7px rgba(0,0,0,.18);
+  box-shadow:0 2px 7px rgba(0,0,0,.18);
   transition:
     transform .35s cubic-bezier(.22,1,.36,1),
     background-color .25s ease
@@ -3863,22 +3630,13 @@ body{
   position:fixed;
   top:78px;
   right:24px;
-  width:min(
-    320px,
-    calc(100vw - 32px)
-  );
-  max-height:
-    min(
-      420px,
-      calc(100vh - 100px)
-    );
+  width:min(320px,calc(100vw - 32px));
+  max-height:min(420px,calc(100vh - 100px));
   overflow:auto;
   background:var(--card);
   border:1px solid var(--border);
   border-radius:16px;
-  box-shadow:
-    0 12px 32px
-    rgba(74,30,0,.18);
+  box-shadow:0 12px 32px rgba(74,30,0,.18);
   padding:12px;
   z-index:150;
   animation:fadeIn .18s ease
@@ -3908,13 +3666,12 @@ body{
 }
 
 /* ============================================================
-   STATS
+   STATISTICS
 ============================================================ */
 
 .lm .stats{
   display:grid;
-  grid-template-columns:
-    repeat(4,1fr);
+  grid-template-columns:repeat(4,1fr);
   gap:14px;
   margin:20px 0 14px
 }
@@ -4017,7 +3774,7 @@ body{
 }
 
 /* ============================================================
-   GRID
+   MAIN GRID / HERO
 ============================================================ */
 
 .lm .grid{
@@ -4033,10 +3790,6 @@ body{
   gap:14px;
   min-width:0
 }
-
-/* ============================================================
-   HERO
-============================================================ */
 
 .lm .hero{
   background:var(--brown-900);
@@ -4074,9 +3827,7 @@ body{
   height:104px;
   border-radius:14px;
   background:#2b1608;
-  border:
-    1px solid
-    rgba(233,198,137,.3);
+  border:1px solid rgba(233,198,137,.3);
   display:grid;
   place-items:center;
   font-size:34px;
@@ -4107,8 +3858,7 @@ body{
 
 .lm .bar{
   height:8px;
-  background:
-    rgba(255,255,255,.18);
+  background:rgba(255,255,255,.18);
   border-radius:999px;
   margin-top:10px;
   overflow:hidden
@@ -4120,9 +3870,7 @@ body{
   width:0;
   background:#F5E7CC;
   border-radius:999px;
-  transition:
-    width 1.2s
-    cubic-bezier(.22,1,.36,1)
+  transition:width 1.2s cubic-bezier(.22,1,.36,1)
 }
 
 .lm .hero-meta{
@@ -4183,7 +3931,7 @@ body{
 }
 
 /* ============================================================
-   SECTION HEAD
+   PERFORMANCE / SECTIONS
 ============================================================ */
 
 .lm .sec-head{
@@ -4209,14 +3957,9 @@ body{
   white-space:nowrap
 }
 
-/* ============================================================
-   PERFORMANCE
-============================================================ */
-
 .lm .perf3{
   display:grid;
-  grid-template-columns:
-    1.35fr .85fr .85fr;
+  grid-template-columns:1.35fr .85fr .85fr;
   gap:14px;
   min-width:0
 }
@@ -4247,10 +3990,6 @@ body{
   overflow-wrap:anywhere
 }
 
-/* ============================================================
-   JOURNEY
-============================================================ */
-
 .lm .journey{
   display:flex;
   align-items:center;
@@ -4268,8 +4007,7 @@ body{
 .lm .modal-back{
   position:fixed;
   inset:0;
-  background:
-    rgba(40,18,0,.45);
+  background:rgba(40,18,0,.45);
   display:grid;
   place-items:center;
   z-index:180;
@@ -4286,15 +4024,12 @@ body{
   background:var(--card);
   border:1px solid var(--border);
   border-radius:20px;
-  animation:
-    fadeUp .35s ease forwards
+  animation:fadeUp .35s ease forwards
 }
 
 .lm .modal header{
   padding:16px 18px;
-  border-bottom:
-    1px solid
-    var(--border-soft);
+  border-bottom:1px solid var(--border-soft);
   display:flex;
   gap:10px;
   align-items:center
@@ -4360,7 +4095,7 @@ body{
 }
 
 /* ============================================================
-   SETTINGS NAME / EMAIL ROWS
+   SETTINGS VALUE SECTIONS
 ============================================================ */
 
 .lm .settings-value-section{
@@ -4416,7 +4151,7 @@ body{
 }
 
 /* ============================================================
-   SETTINGS CHANGE VIEW
+   SETTINGS CHANGE VIEWS
 ============================================================ */
 
 .lm .settings-change-view{
@@ -4429,7 +4164,6 @@ body{
     opacity:0;
     transform:translateY(8px)
   }
-
   to{
     opacity:1;
     transform:none
@@ -4460,12 +4194,7 @@ body{
 .lm .settings-change-content{
   padding:42px 30px 34px;
   text-align:center;
-  animation:
-    settingsContentFade
-    .55s
-    ease
-    .08s
-    both
+  animation:settingsContentFade .55s ease .08s both
 }
 
 @keyframes settingsContentFade{
@@ -4473,7 +4202,6 @@ body{
     opacity:0;
     transform:translateY(10px)
   }
-
   to{
     opacity:1;
     transform:none
@@ -4514,9 +4242,7 @@ body{
 
 .lm .settings-change-content input:focus{
   border-color:var(--brown);
-  box-shadow:
-    0 0 0 3px
-    rgba(122,47,0,.08)
+  box-shadow:0 0 0 3px rgba(122,47,0,.08)
 }
 
 .lm .settings-change-content .name-save{
@@ -4534,7 +4260,7 @@ body{
 }
 
 /* ============================================================
-   SETTINGS PROFILE
+   PROFILE
 ============================================================ */
 
 .lm .settings-profile{
@@ -4577,7 +4303,7 @@ body{
 }
 
 /* ============================================================
-   PHOTO UPLOAD
+   PROFILE PHOTO UPLOAD
 ============================================================ */
 
 .lm .photo-file-input{
@@ -4600,10 +4326,8 @@ body{
   position:relative;
   overflow:hidden;
   box-shadow:
-    0 0 0 1px
-      rgba(233,198,137,.08),
-    0 0 18px
-      rgba(233,198,137,.08);
+    0 0 0 1px rgba(233,198,137,.08),
+    0 0 18px rgba(233,198,137,.08);
   transition:
     border-color .25s ease,
     background-color .25s ease,
@@ -4617,13 +4341,12 @@ body{
   left:-25%;
   width:35%;
   height:220%;
-  background:
-    linear-gradient(
-      90deg,
-      transparent,
-      rgba(255,255,255,.18),
-      transparent
-    );
+  background:linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,.18),
+    transparent
+  );
   transform:rotate(18deg);
   opacity:0;
   transition:
@@ -4636,10 +4359,8 @@ body{
   background:var(--card-2);
   border-color:var(--cream);
   box-shadow:
-    0 0 0 1px
-      rgba(233,198,137,.15),
-    0 0 24px
-      rgba(233,198,137,.18)
+    0 0 0 1px rgba(233,198,137,.15),
+    0 0 24px rgba(233,198,137,.18)
 }
 
 .lm .upload-photo-btn:hover::before{
@@ -4660,10 +4381,6 @@ body{
   margin-top:7px
 }
 
-/* ============================================================
-   MOBILE SETTINGS THEME
-============================================================ */
-
 .lm .mobile-theme-setting{
   display:flex
 }
@@ -4681,8 +4398,7 @@ body{
   border:1px solid rgba(217,45,32,.28);
   border-radius:15px;
   padding:14px;
-  background:
-    rgba(217,45,32,.035)
+  background:rgba(217,45,32,.035)
 }
 
 .lm .danger-title{
@@ -4743,8 +4459,7 @@ body{
   position:fixed;
   inset:0;
   z-index:250;
-  background:
-    rgba(40,18,0,.58);
+  background:rgba(40,18,0,.58);
   display:grid;
   place-items:center;
   padding:16px;
@@ -4754,16 +4469,13 @@ body{
 
 .lm .crop-modal{
   width:min(520px,100%);
-  max-height:
-    calc(100dvh - 32px);
+  max-height:calc(100dvh - 32px);
   overflow:auto;
   overscroll-behavior:contain;
   background:var(--card);
   border:1px solid var(--border);
   border-radius:22px;
-  box-shadow:
-    0 20px 60px
-    rgba(40,18,0,.28)
+  box-shadow:0 20px 60px rgba(40,18,0,.28)
 }
 
 .lm .crop-header{
@@ -4771,9 +4483,7 @@ body{
   align-items:center;
   gap:12px;
   padding:16px 18px;
-  border-bottom:
-    1px solid
-    var(--border-soft)
+  border-bottom:1px solid var(--border-soft)
 }
 
 .lm .crop-header > div{
@@ -4802,9 +4512,7 @@ body{
   overflow:hidden;
   background:#2B1608;
   border:4px solid var(--cream);
-  box-shadow:
-    0 0 0 1px
-    var(--border)
+  box-shadow:0 0 0 1px var(--border)
 }
 
 .lm .crop-window{
@@ -4820,9 +4528,7 @@ body{
   place-items:center;
   color:transparent;
   border-radius:50%;
-  box-shadow:
-    inset 0 0 0 1px
-    rgba(255,255,255,.2)
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)
 }
 
 .lm .crop-controls{
@@ -4855,9 +4561,7 @@ body{
   grid-template-columns:1fr 1.4fr;
   gap:10px;
   padding:16px 18px;
-  border-top:
-    1px solid
-    var(--border-soft)
+  border-top:1px solid var(--border-soft)
 }
 
 .lm .crop-cancel,
@@ -4885,8 +4589,7 @@ body{
   position:fixed;
   inset:0;
   z-index:200;
-  background:
-    rgba(40,18,0,.45);
+  background:rgba(40,18,0,.45);
   display:grid;
   place-items:center;
   padding:20px;
@@ -4900,9 +4603,7 @@ body{
   border:1px solid var(--border);
   border-radius:22px;
   padding:30px;
-  box-shadow:
-    0 20px 60px
-    rgba(74,30,0,.18);
+  box-shadow:0 20px 60px rgba(74,30,0,.18);
   text-align:center
 }
 
@@ -4950,15 +4651,14 @@ body{
 }
 
 /* ============================================================
-   CONFIRMATION
+   CONFIRMATION MODAL
 ============================================================ */
 
 .lm .confirm-back{
   position:fixed;
   inset:0;
   z-index:400;
-  background:
-    rgba(40,18,0,.52);
+  background:rgba(40,18,0,.52);
   display:grid;
   place-items:center;
   padding:18px;
@@ -4972,15 +4672,9 @@ body{
   border:1px solid var(--border);
   border-radius:20px;
   padding:28px;
-  box-shadow:
-    0 20px 60px
-    rgba(40,18,0,.25);
+  box-shadow:0 20px 60px rgba(40,18,0,.25);
   text-align:center;
-  animation:
-    confirmUp
-    .28s
-    cubic-bezier(.22,1,.36,1)
-    forwards
+  animation:confirmUp .28s cubic-bezier(.22,1,.36,1) forwards
 }
 
 @keyframes confirmUp{
@@ -4988,7 +4682,6 @@ body{
     opacity:0;
     transform:translateY(10px) scale(.98)
   }
-
   to{
     opacity:1;
     transform:none
@@ -5081,9 +4774,7 @@ body{
   position:fixed;
   left:50%;
   bottom:28px;
-  transform:
-    translateX(-50%)
-    translateY(18px);
+  transform:translateX(-50%) translateY(18px);
   z-index:500;
   min-width:min(380px,calc(100vw - 32px));
   max-width:calc(100vw - 32px);
@@ -5095,42 +4786,29 @@ body{
   background:var(--card);
   color:var(--text);
   border:1px solid var(--border);
-  box-shadow:
-    0 14px 40px
-    rgba(40,18,0,.22);
+  box-shadow:0 14px 40px rgba(40,18,0,.22);
   font-size:13px;
   font-weight:600;
-  animation:
-    toastIn
-    .32s
-    cubic-bezier(.22,1,.36,1)
-    forwards
+  animation:toastIn .32s cubic-bezier(.22,1,.36,1) forwards
 }
 
 @keyframes toastIn{
   from{
     opacity:0;
-    transform:
-      translateX(-50%)
-      translateY(18px)
+    transform:translateX(-50%) translateY(18px)
   }
-
   to{
     opacity:1;
-    transform:
-      translateX(-50%)
-      translateY(0)
+    transform:translateX(-50%) translateY(0)
   }
 }
 
 .lm-toast.error{
-  border-color:
-    rgba(217,45,32,.25)
+  border-color:rgba(217,45,32,.25)
 }
 
 .lm-toast.success{
-  border-color:
-    rgba(122,47,0,.25)
+  border-color:rgba(122,47,0,.25)
 }
 
 .lm-toast .toast-icon{
@@ -5155,14 +4833,13 @@ body{
 }
 
 /* ============================================================
-   ANIMATION
+   ANIMATIONS
 ============================================================ */
 
 .lm .reveal{
   opacity:0;
   transform:translateY(8px);
-  animation:
-    fadeUp .55s ease forwards
+  animation:fadeUp .55s ease forwards
 }
 
 @keyframes fadeUp{
@@ -5176,7 +4853,6 @@ body{
   from{
     opacity:0
   }
-
   to{
     opacity:1
   }
@@ -5217,7 +4893,6 @@ body{
 }
 
 @media (prefers-reduced-motion:reduce){
-
   .lm *,
   .lm *:before,
   .lm *:after{
@@ -5240,20 +4915,17 @@ body{
 ============================================================ */
 
 @media(max-width:1100px){
-
   .lm .stats{
-    grid-template-columns:
-      repeat(2,1fr)
+    grid-template-columns:repeat(2,1fr)
   }
 
   .lm .perf3{
-    grid-template-columns:
-      repeat(3,minmax(0,1fr))
+    grid-template-columns:repeat(3,minmax(0,1fr))
   }
 }
 
 /* ============================================================
-   PHONE
+   MOBILE
 ============================================================ */
 
 @media(max-width:860px){
@@ -5262,29 +4934,20 @@ body{
     display:none
   }
 
-  /*
-    IMPORTANT:
-    Sidebar is independently scrollable.
-    Body scrolling is locked while menuOpen,
-    so the dashboard behind it cannot move.
-  */
-
   .lm .sidebar{
     transform:translateX(-105%);
-    transition:
-      transform .28s ease;
-    border-radius:
-      0 20px 20px 0;
+    transition:transform .28s ease;
+    border-radius:0 20px 20px 0;
     overflow-y:auto;
+    overflow-x:hidden;
     overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
     touch-action:pan-y
   }
 
   .lm .sidebar.open{
     transform:none;
-    box-shadow:
-      0 0 60px
-      rgba(0,0,0,.35)
+    box-shadow:0 0 60px rgba(0,0,0,.35)
   }
 
   .lm .main{
@@ -5329,8 +4992,7 @@ body{
   .lm .scrim{
     position:fixed;
     inset:0;
-    background:
-      rgba(0,0,0,.35);
+    background:rgba(0,0,0,.35);
     z-index:40;
     display:none;
     touch-action:none
@@ -5341,8 +5003,7 @@ body{
   }
 
   .lm .stats{
-    grid-template-columns:
-      repeat(2,minmax(0,1fr));
+    grid-template-columns:repeat(2,minmax(0,1fr));
     gap:10px
   }
 
@@ -5382,8 +5043,7 @@ body{
   .lm .pop{
     top:72px;
     right:12px;
-    width:
-      calc(100vw - 24px);
+    width:calc(100vw - 24px);
     max-height:70vh
   }
 
@@ -5396,20 +5056,16 @@ body{
   }
 
   .lm .settings-change-content{
-    padding:
-      34px
-      24px
-      30px
+    padding:34px 24px 30px
   }
 
   .lm .danger-content{
-    align-items:flex-start;
+    align-items:flex-start
   }
 
   .lm .delete-account-btn{
     flex-shrink:0
   }
-
 }
 
 /* ============================================================
@@ -5490,10 +5146,7 @@ body{
   }
 
   .lm .settings-change-content{
-    padding:
-      30px
-      18px
-      26px
+    padding:30px 18px 26px
   }
 
   .lm .settings-change-content h2{
@@ -5501,11 +5154,11 @@ body{
   }
 
   .lm .danger-content{
-    flex-direction:column;
+    flex-direction:column
   }
 
   .lm .delete-account-btn{
-    width:100%;
+    width:100%
   }
 
   .lm .confirm-modal{
@@ -5518,10 +5171,8 @@ body{
 
   .lm-toast{
     bottom:18px;
-    min-width:
-      calc(100vw - 28px);
+    min-width:calc(100vw - 28px)
   }
-
 }
 
 /* ============================================================
@@ -5548,15 +5199,11 @@ body{
   }
 
   .lm .settings-change-content{
-    padding:
-      26px
-      15px
-      24px
+    padding:26px 15px 24px
   }
 
   .lm .confirm-actions{
     grid-template-columns:1fr
   }
-
 }
 `;

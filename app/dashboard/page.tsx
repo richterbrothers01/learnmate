@@ -31,8 +31,15 @@ type StreakMeta = {
 };
 
 type SettingsView = "main" | "name" | "email";
-
 type ConfirmAction = "logout" | "delete" | null;
+
+type Course = {
+  id: string;
+  title: string;
+  class: string;
+  subject: string;
+  progress: number;
+};
 
 const supabase = createClient();
 
@@ -44,13 +51,21 @@ const FALLBACK_USER: User = {
 };
 
 const MOCK_NOTIFS: Notif[] = [];
-
 const MOCK_OVERALL_PROGRESS = 0;
 const MOCK_STUDY_TIME = "0h 0m";
 
-/* ============================================================
-   STREAK
-============================================================ */
+const CLASSES = Array.from(
+  { length: 12 },
+  (_, i) => `Class ${i + 1}`,
+);
+
+const SUBJECTS = [
+  "Information Technology",
+  "Science",
+  "Social Science",
+  "Mathematics",
+  "English",
+];
 
 function getStreakMeta(days: number): StreakMeta {
   if (days <= 3) {
@@ -82,49 +97,37 @@ function getStreakMeta(days: number): StreakMeta {
   };
 }
 
-/*
-  Calculates the current consecutive streak from activity dates.
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
-  Example:
-  28 Sep
-  27 Sep
-  26 Sep
+  return `${year}-${month}-${day}`;
+}
 
-  = 3 days
+function parseDateString(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
 
-  If the user returns on 30 Sep:
-
-  30 Sep
-  29 Sep  <- missing
-
-  = 1 day
-*/
 function calculateCurrentStreak(dates: string[]): number {
   if (!dates.length) return 0;
 
-  const uniqueDates = Array.from(new Set(dates)).sort(
-    (a, b) => b.localeCompare(a),
+  const uniqueDates = Array.from(new Set(dates)).sort((a, b) =>
+    b.localeCompare(a),
   );
 
-  const today = new Date();
-  const todayString = getLocalDateString(today);
+  const today = getLocalDateString(new Date());
 
-  /*
-    If today's visit hasn't been recorded yet for some reason,
-    calculate from the latest recorded date.
-  */
   const firstDate =
-    uniqueDates[0] === todayString
-      ? todayString
-      : uniqueDates[0];
+    uniqueDates[0] === today ? today : uniqueDates[0];
 
   let streak = 1;
 
   for (let i = 1; i < uniqueDates.length; i += 1) {
     const current = parseDateString(firstDate);
-    current.setDate(
-      current.getDate() - (streak),
-    );
+
+    current.setDate(current.getDate() - streak);
 
     const expected = getLocalDateString(current);
 
@@ -138,63 +141,28 @@ function calculateCurrentStreak(dates: string[]): number {
   return streak;
 }
 
-function getLocalDateString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(
-    date.getMonth() + 1,
-  ).padStart(2, "0");
-  const day = String(
-    date.getDate(),
-  ).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function parseDateString(value: string): Date {
-  const [year, month, day] = value
-    .split("-")
-    .map(Number);
-
-  return new Date(
-    year,
-    month - 1,
-    day,
-  );
-}
-
 const NAV_ITEMS = [
-  { emoji: "🏠", label: "Dashboard", active: true },
-  { emoji: "📚", label: "My Courses", active: false },
-  { emoji: "💡", label: "Doubt Clearer", active: false },
-  { emoji: "🧠", label: "Quizzes", active: false },
-  { emoji: "📝", label: "Tests", active: false },
-  { emoji: "🏆", label: "Milestones", active: false },
-  { emoji: "📊", label: "Analytics", active: false },
+  { emoji: "🏠", label: "Dashboard" },
+  { emoji: "📚", label: "My Courses" },
+  { emoji: "💡", label: "Doubt Clearer" },
+  { emoji: "🧠", label: "Quizzes" },
+  { emoji: "📝", label: "Tests" },
+  { emoji: "🏆", label: "Milestones" },
+  { emoji: "📊", label: "Analytics" },
 ];
 
 const RING_C = 201.06;
 
-function greetingForHour(
-  hour: number,
-  name: string,
-): string {
+function greetingForHour(hour: number, name: string): string {
   const safeName = name || "Student";
 
-  if (hour >= 0 && hour < 4) {
-    return `Up late ${safeName}?`;
-  }
-
-  if (hour >= 4 && hour < 8) {
+  if (hour >= 0 && hour < 4) return `Up late ${safeName}?`;
+  if (hour >= 4 && hour < 8)
     return `Early morning study ${safeName}?`;
-  }
-
-  if (hour >= 8 && hour < 12) {
+  if (hour >= 8 && hour < 12)
     return `Good morning, ${safeName}!`;
-  }
-
-  if (hour >= 12 && hour < 18) {
+  if (hour >= 12 && hour < 18)
     return `Good Evening, ${safeName}!`;
-  }
 
   return `Night Grind ${safeName}?`;
 }
@@ -227,8 +195,7 @@ function useTypewriter(
       }
     }, speed);
 
-    return () =>
-      window.clearInterval(timer);
+    return () => window.clearInterval(timer);
   }, [text, speed, enabled]);
 
   return displayed;
@@ -251,16 +218,10 @@ function ProgressRing({
     if (!node || !label) return;
 
     const reduced = window
-      .matchMedia(
-        "(prefers-reduced-motion: reduce)",
-      )
+      .matchMedia("(prefers-reduced-motion: reduce)")
       .matches;
 
-    if (
-      reduced ||
-      !animate ||
-      value === 0
-    ) {
+    if (reduced || !animate || value === 0) {
       node.style.strokeDashoffset = String(
         RING_C * (1 - value / 100),
       );
@@ -270,35 +231,30 @@ function ProgressRing({
     }
 
     let raf = 0;
-    const t0 = performance.now();
-    const dur = 1400;
+    const start = performance.now();
+    const duration = 1400;
 
-    const tick = (t: number) => {
-      const k = Math.min(
+    const tick = (time: number) => {
+      const progress = Math.min(
         1,
-        (t - t0) / dur,
+        (time - start) / duration,
       );
 
-      const eased =
-        1 - Math.pow(1 - k, 3);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = value * eased;
 
-      const v = value * eased;
+      node.style.strokeDashoffset = String(
+        RING_C * (1 - current / 100),
+      );
 
-      node.style.strokeDashoffset =
-        String(
-          RING_C * (1 - v / 100),
-        );
+      label.textContent = `${Math.round(current)}%`;
 
-      label.textContent = `${Math.round(v)}%`;
-
-      if (k < 1) {
+      if (progress < 1) {
         raf = requestAnimationFrame(tick);
       } else {
-        node.style.strokeDashoffset =
-          String(
-            RING_C *
-            (1 - value / 100),
-          );
+        node.style.strokeDashoffset = String(
+          RING_C * (1 - value / 100),
+        );
 
         label.textContent = `${value}%`;
       }
@@ -306,8 +262,7 @@ function ProgressRing({
 
     raf = requestAnimationFrame(tick);
 
-    return () =>
-      cancelAnimationFrame(raf);
+    return () => cancelAnimationFrame(raf);
   }, [value, animate]);
 
   return (
@@ -316,10 +271,7 @@ function ProgressRing({
       role="img"
       aria-label={`Overall progress ${value} percent`}
     >
-      <svg
-        viewBox="0 0 80 80"
-        aria-hidden="true"
-      >
+      <svg viewBox="0 0 80 80" aria-hidden="true">
         <circle
           cx="40"
           cy="40"
@@ -359,51 +311,32 @@ function ProgressRing({
 }
 
 export default function DashboardPage() {
-  const [user, setUser] =
-    useState<User>(FALLBACK_USER);
+  const [user, setUser] = useState<User>(FALLBACK_USER);
+  const [notifs] = useState<Notif[]>(MOCK_NOTIFS);
 
-  const [notifs] =
-    useState<Notif[]>(MOCK_NOTIFS);
-
-  const [notifOpen, setNotifOpen] =
-    useState(false);
-
-  const [settingsOpen, setSettingsOpen] =
-    useState(false);
-
-  const [menuOpen, setMenuOpen] =
-    useState(false);
-
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [settingsView, setSettingsView] =
     useState<SettingsView>("main");
 
   const [theme, setTheme] =
     useState<"light" | "dark">("light");
 
-  const [nameDraft, setNameDraft] =
-    useState("");
-
-  const [emailDraft, setEmailDraft] =
-    useState("");
+  const [nameDraft, setNameDraft] = useState("");
+  const [emailDraft, setEmailDraft] = useState("");
 
   const [settingsSaving, setSettingsSaving] =
     useState(false);
+  const [settingsError, setSettingsError] = useState("");
 
-  const [settingsError, setSettingsError] =
-    useState("");
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "error" | "success";
+  } | null>(null);
 
-  const [toast, setToast] =
-    useState<{
-      message: string;
-      type: "error" | "success";
-    } | null>(null);
-
-  const [streakImgOk, setStreakImgOk] =
-    useState(true);
-
-  const [streakDays, setStreakDays] =
-    useState(0);
-
+  const [streakImgOk, setStreakImgOk] = useState(true);
+  const [streakDays, setStreakDays] = useState(0);
   const [streakLoading, setStreakLoading] =
     useState(true);
 
@@ -413,11 +346,8 @@ export default function DashboardPage() {
   const [accountActionLoading, setAccountActionLoading] =
     useState(false);
 
-  const notifRef =
-    useRef<HTMLDivElement>(null);
-
-  const settingsRef =
-    useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   const [photoPreview, setPhotoPreview] =
     useState<string | null>(null);
@@ -428,23 +358,13 @@ export default function DashboardPage() {
   const [selectedPhotoFile, setSelectedPhotoFile] =
     useState<File | null>(null);
 
-  const [cropOpen, setCropOpen] =
-    useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropX, setCropX] = useState(0);
+  const [cropY, setCropY] = useState(0);
 
-  const [cropZoom, setCropZoom] =
-    useState(1);
-
-  const [cropX, setCropX] =
-    useState(0);
-
-  const [cropY, setCropY] =
-    useState(0);
-
-  const [photoSaving, setPhotoSaving] =
-    useState(false);
-
-  const [photoError, setPhotoError] =
-    useState("");
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const [photoError, setPhotoError] = useState("");
 
   const photoInputRef =
     useRef<HTMLInputElement>(null);
@@ -455,14 +375,84 @@ export default function DashboardPage() {
   const [needsNameSetup, setNeedsNameSetup] =
     useState(false);
 
-  const [nameSaving, setNameSaving] =
-    useState(false);
-
-  const [nameError, setNameError] =
-    useState("");
-
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState("");
   const [profileLoading, setProfileLoading] =
     useState(true);
+
+  /* ==========================================================
+     MARK 2 — COURSES
+  ========================================================== */
+
+  const [activeSection, setActiveSection] =
+    useState<"dashboard" | "courses">(
+      "dashboard",
+    );
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [addClosing, setAddClosing] = useState(false);
+
+  const [courses, setCourses] =
+    useState<Course[]>([]);
+
+  const [selectedClass, setSelectedClass] =
+    useState<string | null>(null);
+
+  const [selectedSubject, setSelectedSubject] =
+    useState<string | null>(null);
+
+  const [coursesContentReady, setCoursesContentReady] =
+    useState(false);
+
+  const [addControlsReady, setAddControlsReady] =
+    useState(false);
+
+  useEffect(() => {
+    const savedSection =
+      localStorage.getItem(
+        "learnmate-active-section",
+      );
+
+    if (savedSection === "courses") {
+      setActiveSection("courses");
+    } else {
+      setActiveSection("dashboard");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSection !== "courses") {
+      setCoursesContentReady(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCoursesContentReady(true);
+    }, 30);
+
+    return () => window.clearTimeout(timer);
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (!addOpen) {
+      setAddControlsReady(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setAddControlsReady(true);
+    }, 280);
+
+    return () => window.clearTimeout(timer);
+  }, [addOpen]);
+
+  const ongoingCourses = courses.filter(
+    (course) => course.progress < 100,
+  );
+
+  const completedCourses = courses.filter(
+    (course) => course.progress === 100,
+  );
 
   /* ==========================================================
      LOAD PROFILE
@@ -475,8 +465,7 @@ export default function DashboardPage() {
       try {
         const {
           data: { user: authUser },
-        } =
-          await supabase.auth.getUser();
+        } = await supabase.auth.getUser();
 
         if (!authUser) {
           if (mounted) {
@@ -489,9 +478,7 @@ export default function DashboardPage() {
         const { data: profile } =
           await supabase
             .from("profiles")
-            .select(
-              "fullname, avatar_url",
-            )
+            .select("fullname, avatar_url")
             .eq("id", authUser.id)
             .maybeSingle();
 
@@ -509,9 +496,7 @@ export default function DashboardPage() {
         });
 
         setNameDraft(fullname);
-        setEmailDraft(
-          authUser.email || "",
-        );
+        setEmailDraft(authUser.email || "");
 
         if (!fullname) {
           setNeedsNameSetup(true);
@@ -548,30 +533,16 @@ export default function DashboardPage() {
 
         const {
           data: { user: authUser },
-        } =
-          await supabase.auth.getUser();
+        } = await supabase.auth.getUser();
 
         if (!authUser) {
-          if (mounted) {
-            setStreakDays(0);
-          }
-
+          if (mounted) setStreakDays(0);
           return;
         }
 
         const today =
-          getLocalDateString(
-            new Date(),
-          );
+          getLocalDateString(new Date());
 
-        /*
-          The primary key is:
-          (user_id, activity_date)
-
-          Therefore visiting multiple times
-          on the same day does NOT increase
-          the streak.
-        */
         const { error: insertError } =
           await supabase
             .from("study_streaks")
@@ -594,27 +565,16 @@ export default function DashboardPage() {
           );
         }
 
-        /*
-          Get all recorded activity dates for
-          this user. The table is small enough
-          for this implementation, and later
-          it can be optimized with a server-side
-          streak function if necessary.
-        */
         const {
           data: activity,
           error: activityError,
-        } =
-          await supabase
-            .from("study_streaks")
-            .select("activity_date")
-            .eq("user_id", authUser.id)
-            .order(
-              "activity_date",
-              {
-                ascending: false,
-              },
-            );
+        } = await supabase
+          .from("study_streaks")
+          .select("activity_date")
+          .eq("user_id", authUser.id)
+          .order("activity_date", {
+            ascending: false,
+          });
 
         if (activityError) {
           console.error(
@@ -622,10 +582,7 @@ export default function DashboardPage() {
             activityError,
           );
 
-          if (mounted) {
-            setStreakDays(0);
-          }
-
+          if (mounted) setStreakDays(0);
           return;
         }
 
@@ -633,8 +590,7 @@ export default function DashboardPage() {
 
         const dates =
           activity?.map(
-            (row) =>
-              row.activity_date,
+            (row) => row.activity_date,
           ) || [];
 
         setStreakDays(
@@ -646,9 +602,7 @@ export default function DashboardPage() {
           error,
         );
 
-        if (mounted) {
-          setStreakDays(0);
-        }
+        if (mounted) setStreakDays(0);
       } finally {
         if (mounted) {
           setStreakLoading(false);
@@ -677,9 +631,7 @@ export default function DashboardPage() {
       if (
         notifOpen &&
         notifRef.current &&
-        !notifRef.current.contains(
-          target,
-        )
+        !notifRef.current.contains(target)
       ) {
         setNotifOpen(false);
       }
@@ -687,9 +639,7 @@ export default function DashboardPage() {
       if (
         settingsOpen &&
         settingsRef.current &&
-        !settingsRef.current.contains(
-          target,
-        )
+        !settingsRef.current.contains(target)
       ) {
         setSettingsOpen(false);
         setSettingsView("main");
@@ -707,18 +657,10 @@ export default function DashboardPage() {
         handleOutsideClick,
       );
     };
-  }, [
-    notifOpen,
-    settingsOpen,
-  ]);
+  }, [notifOpen, settingsOpen]);
 
   /* ==========================================================
-     LOCK BACKGROUND SCROLL
-     
-     IMPORTANT:
-     menuOpen is included here so that when
-     the mobile sidebar is open, the main
-     dashboard cannot scroll.
+     LOCK BACKGROUND
   ========================================================== */
 
   useEffect(() => {
@@ -731,15 +673,15 @@ export default function DashboardPage() {
 
     if (!locked) {
       document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
-
+      document.documentElement.style.overflow =
+        "";
       return;
     }
 
-    const previousBodyOverflow =
+    const previousBody =
       document.body.style.overflow;
 
-    const previousHtmlOverflow =
+    const previousHtml =
       document.documentElement.style.overflow;
 
     document.body.style.overflow = "hidden";
@@ -748,10 +690,10 @@ export default function DashboardPage() {
 
     return () => {
       document.body.style.overflow =
-        previousBodyOverflow;
+        previousBody;
 
       document.documentElement.style.overflow =
-        previousHtmlOverflow;
+        previousHtml;
     };
   }, [
     menuOpen,
@@ -769,17 +711,16 @@ export default function DashboardPage() {
     const saved =
       localStorage.getItem(
         "learnmate-theme",
-      ) as
-      | "light"
-      | "dark"
-      | null;
+      ) as "light" | "dark" | null;
 
     if (saved) {
       setTheme(saved);
     } else if (
-      window.matchMedia(
-        "(prefers-color-scheme: dark)",
-      ).matches
+      window
+        .matchMedia(
+          "(prefers-color-scheme: dark)",
+        )
+        .matches
     ) {
       setTheme("dark");
     }
@@ -798,9 +739,7 @@ export default function DashboardPage() {
 
   const showToast = (
     message: string,
-    type:
-      | "error"
-      | "success" = "error",
+    type: "error" | "success" = "error",
   ) => {
     setToast({
       message,
@@ -818,357 +757,295 @@ export default function DashboardPage() {
 
   const isValidLearnMateName = (
     name: string,
-  ) => {
-    return /^[A-Za-z0-9 ]+$/.test(
-      name,
-    );
-  };
+  ) => /^[A-Za-z0-9 ]+$/.test(name);
 
   const isValidEmail = (
     email: string,
-  ) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+  ) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
       email.trim(),
     );
-  };
 
   /* ==========================================================
      FIRST LOGIN NAME
   ========================================================== */
 
-  const saveLearnMateName =
-    async () => {
-      const cleaned =
-        nameDraft.trim();
+  const saveLearnMateName = async () => {
+    const cleaned = nameDraft.trim();
 
-      if (!cleaned) {
-        setNameError(
-          "Please enter your name.",
-        );
+    if (!cleaned) {
+      setNameError(
+        "Please enter your name.",
+      );
+      return;
+    }
 
+    if (
+      !isValidLearnMateName(cleaned)
+    ) {
+      setNameError(
+        "Name can't have special characters like -=+@#$%^&*() etc.",
+      );
+      return;
+    }
+
+    setNameSaving(true);
+    setNameError("");
+
+    try {
+      const {
+        data: { user: authUser },
+        error: userError,
+      } =
+        await supabase.auth.getUser();
+
+      if (userError || !authUser) {
+        window.location.href = "/auth";
         return;
       }
 
-      if (
-        !isValidLearnMateName(
-          cleaned,
-        )
-      ) {
-        setNameError(
-          "Name can't have special characters like -=+@#$%^&*() etc.",
-        );
+      const { error: updateError } =
+        await supabase
+          .from("profiles")
+          .update({
+            fullname: cleaned,
+          })
+          .eq("id", authUser.id);
 
+      if (updateError) {
+        setNameError(
+          updateError.message,
+        );
         return;
       }
 
-      setNameSaving(true);
-      setNameError("");
+      setUser((prev) => ({
+        ...prev,
+        name: cleaned,
+      }));
 
-      try {
-        const {
-          data: { user: authUser },
-          error: userError,
-        } =
-          await supabase.auth.getUser();
+      setNeedsNameSetup(false);
+    } catch (error) {
+      console.error(error);
 
-        if (
-          userError ||
-          !authUser
-        ) {
-          window.location.href =
-            "/auth";
-
-          return;
-        }
-
-        const {
-          error: updateError,
-        } =
-          await supabase
-            .from("profiles")
-            .update({
-              fullname: cleaned,
-            })
-            .eq(
-              "id",
-              authUser.id,
-            );
-
-        if (updateError) {
-          setNameError(
-            updateError.message,
-          );
-
-          return;
-        }
-
-        setUser((prev) => ({
-          ...prev,
-          name: cleaned,
-        }));
-
-        setNeedsNameSetup(false);
-      } catch (error) {
-        console.error(error);
-
-        setNameError(
-          "Something went wrong while saving your name.",
-        );
-      } finally {
-        setNameSaving(false);
-      }
-    };
+      setNameError(
+        "Something went wrong while saving your name.",
+      );
+    } finally {
+      setNameSaving(false);
+    }
+  };
 
   /* ==========================================================
      CHANGE NAME
   ========================================================== */
 
-  const changeLearnMateName =
-    async () => {
-      const cleaned =
-        nameDraft.trim();
+  const changeLearnMateName = async () => {
+    const cleaned = nameDraft.trim();
 
-      if (!cleaned) {
-        showToast(
-          "Please enter your name.",
-        );
+    if (!cleaned) {
+      showToast("Please enter your name.");
+      return;
+    }
 
+    if (
+      !isValidLearnMateName(cleaned)
+    ) {
+      showToast(
+        "Name can't have special characters like -=+@#$%^&*() etc.",
+      );
+      return;
+    }
+
+    setSettingsSaving(true);
+
+    try {
+      const {
+        data: { user: authUser },
+      } =
+        await supabase.auth.getUser();
+
+      if (!authUser) {
+        window.location.href = "/auth";
         return;
       }
 
-      if (
-        !isValidLearnMateName(
-          cleaned,
-        )
-      ) {
-        showToast(
-          "Name can't have special characters like -=+@#$%^&*() etc.",
-        );
+      const { error } =
+        await supabase
+          .from("profiles")
+          .update({
+            fullname: cleaned,
+          })
+          .eq("id", authUser.id);
 
+      if (error) {
+        showToast(error.message);
         return;
       }
 
-      setSettingsSaving(true);
+      setUser((current) => ({
+        ...current,
+        name: cleaned,
+      }));
 
-      try {
-        const {
-          data: { user: authUser },
-        } =
-          await supabase.auth.getUser();
+      setNameDraft(cleaned);
 
-        if (!authUser) {
-          window.location.href =
-            "/auth";
+      showToast(
+        "Your LearnMate name has been changed.",
+        "success",
+      );
 
-          return;
-        }
+      setSettingsView("main");
+    } catch (error) {
+      console.error(error);
 
-        const { error } =
-          await supabase
-            .from("profiles")
-            .update({
-              fullname: cleaned,
-            })
-            .eq(
-              "id",
-              authUser.id,
-            );
-
-        if (error) {
-          showToast(error.message);
-
-          return;
-        }
-
-        setUser((current) => ({
-          ...current,
-          name: cleaned,
-        }));
-
-        setNameDraft(cleaned);
-
-        showToast(
-          "Your LearnMate name has been changed.",
-          "success",
-        );
-
-        setSettingsView("main");
-      } catch (error) {
-        console.error(error);
-
-        showToast(
-          "Something went wrong while changing your name.",
-        );
-      } finally {
-        setSettingsSaving(false);
-      }
-    };
+      showToast(
+        "Something went wrong while changing your name.",
+      );
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
 
   /* ==========================================================
      CHANGE EMAIL
   ========================================================== */
 
-  const changeEmail =
-    async () => {
-      const cleaned =
-        emailDraft.trim();
+  const changeEmail = async () => {
+    const cleaned = emailDraft.trim();
 
-      if (!cleaned) {
-        showToast(
-          "Please enter your email.",
-        );
+    if (!cleaned) {
+      showToast(
+        "Please enter your email.",
+      );
+      return;
+    }
 
+    if (!isValidEmail(cleaned)) {
+      showToast(
+        "Please enter a valid email address.",
+      );
+      return;
+    }
+
+    if (
+      cleaned.toLowerCase() ===
+      user.email.toLowerCase()
+    ) {
+      showToast(
+        "This is already your current email.",
+      );
+      return;
+    }
+
+    setSettingsSaving(true);
+
+    try {
+      const {
+        data: { user: authUser },
+      } =
+        await supabase.auth.getUser();
+
+      if (!authUser) {
+        window.location.href = "/auth";
         return;
       }
 
-      if (
-        !isValidEmail(cleaned)
-      ) {
-        showToast(
-          "Please enter a valid email address.",
-        );
+      const { error } =
+        await supabase.auth.updateUser({
+          email: cleaned,
+        });
 
+      if (error) {
+        showToast(error.message);
         return;
       }
 
-      if (
-        cleaned.toLowerCase() ===
-        user.email.toLowerCase()
-      ) {
-        showToast(
-          "This is already your current email.",
-        );
+      showToast(
+        "Check your new email to confirm the change.",
+        "success",
+      );
 
-        return;
-      }
+      setSettingsView("main");
+    } catch (error) {
+      console.error(error);
 
-      setSettingsSaving(true);
-
-      try {
-        const {
-          data: { user: authUser },
-        } =
-          await supabase.auth.getUser();
-
-        if (!authUser) {
-          window.location.href =
-            "/auth";
-
-          return;
-        }
-
-        const { error } =
-          await supabase.auth.updateUser(
-            {
-              email: cleaned,
-            },
-          );
-
-        if (error) {
-          showToast(error.message);
-
-          return;
-        }
-
-        showToast(
-          "Check your new email to confirm the change.",
-          "success",
-        );
-
-        setSettingsView("main");
-      } catch (error) {
-        console.error(error);
-
-        showToast(
-          "Something went wrong while changing your email.",
-        );
-      } finally {
-        setSettingsSaving(false);
-      }
-    };
+      showToast(
+        "Something went wrong while changing your email.",
+      );
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
 
   /* ==========================================================
      SAVE SETTINGS
   ========================================================== */
 
-  const saveSettings =
-    async () => {
-      const cleaned =
-        nameDraft.trim();
+  const saveSettings = async () => {
+    const cleaned = nameDraft.trim();
 
-      if (!cleaned) {
-        showToast(
-          "Please enter your name.",
-        );
+    if (!cleaned) {
+      showToast("Please enter your name.");
+      return;
+    }
 
+    if (
+      !isValidLearnMateName(cleaned)
+    ) {
+      showToast(
+        "Name can't have special characters like -=+@#$%^&*() etc.",
+      );
+      return;
+    }
+
+    setSettingsSaving(true);
+
+    try {
+      const {
+        data: { user: authUser },
+      } =
+        await supabase.auth.getUser();
+
+      if (!authUser) {
+        window.location.href = "/auth";
         return;
       }
 
-      if (
-        !isValidLearnMateName(
-          cleaned,
-        )
-      ) {
-        showToast(
-          "Name can't have special characters like -=+@#$%^&*() etc.",
-        );
+      const { error } =
+        await supabase
+          .from("profiles")
+          .update({
+            fullname: cleaned,
+          })
+          .eq("id", authUser.id);
 
+      if (error) {
+        showToast(error.message);
         return;
       }
 
-      setSettingsSaving(true);
+      setUser((current) => ({
+        ...current,
+        name: cleaned,
+      }));
 
-      try {
-        const {
-          data: { user: authUser },
-        } =
-          await supabase.auth.getUser();
+      setNameDraft(cleaned);
 
-        if (!authUser) {
-          window.location.href =
-            "/auth";
+      showToast(
+        "Your LearnMate name has been updated.",
+        "success",
+      );
+    } catch (error) {
+      console.error(error);
 
-          return;
-        }
-
-        const { error } =
-          await supabase
-            .from("profiles")
-            .update({
-              fullname: cleaned,
-            })
-            .eq(
-              "id",
-              authUser.id,
-            );
-
-        if (error) {
-          showToast(error.message);
-
-          return;
-        }
-
-        setUser((current) => ({
-          ...current,
-          name: cleaned,
-        }));
-
-        setNameDraft(cleaned);
-
-        showToast(
-          "Your LearnMate name has been updated.",
-          "success",
-        );
-      } catch (error) {
-        console.error(error);
-
-        showToast(
-          "Something went wrong while saving your settings.",
-        );
-      } finally {
-        setSettingsSaving(false);
-      }
-    };
+      showToast(
+        "Something went wrong while saving your settings.",
+      );
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
 
   /* ==========================================================
      THEME
@@ -1191,7 +1068,7 @@ export default function DashboardPage() {
   };
 
   /* ==========================================================
-     LOGOUT
+     LOGOUT / DELETE
   ========================================================== */
 
   const requestLogout = () => {
@@ -1200,123 +1077,99 @@ export default function DashboardPage() {
     setConfirmAction("logout");
   };
 
-  const handleLogout =
-    async () => {
-      setAccountActionLoading(true);
+  const handleLogout = async () => {
+    setAccountActionLoading(true);
 
-      try {
-        const { error } =
-          await supabase.auth.signOut();
-
-        if (error) {
-          showToast(
-            error.message,
-          );
-
-          setConfirmAction(null);
-          return;
-        }
-
-        window.location.href =
-          "/auth";
-      } catch (error) {
-        console.error(
-          "Logout error:",
-          error,
-        );
-
-        showToast(
-          "Could not log out. Please try again.",
-        );
-
-        setConfirmAction(null);
-      } finally {
-        setAccountActionLoading(
-          false,
-        );
-      }
-    };
-
-  /* ==========================================================
-     DELETE ACCOUNT
-  ========================================================== */
-
-  const requestDeleteAccount =
-    () => {
-      setNotifOpen(false);
-      setSettingsOpen(false);
-      setConfirmAction("delete");
-    };
-
-  const handleDeleteAccount =
-    async () => {
-      setAccountActionLoading(true);
-
-      try {
-        const {
-          data: {
-            session,
-          },
-        } =
-          await supabase.auth.getSession();
-
-        if (!session) {
-          window.location.href =
-            "/auth";
-
-          return;
-        }
-
-        const response =
-          await fetch(
-            "/api/account/delete",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${session.access_token}`,
-              },
-            },
-          );
-
-        const result =
-          await response
-            .json()
-            .catch(() => null);
-
-        if (!response.ok) {
-          throw new Error(
-            result?.error ||
-            "Could not delete your account.",
-          );
-        }
-
-        /*
-          The Auth user has now been deleted.
-          The old account can no longer authenticate.
-        */
+    try {
+      const { error } =
         await supabase.auth.signOut();
 
-        window.location.href =
-          "/auth";
-      } catch (error) {
-        console.error(
-          "Account deletion error:",
-          error,
-        );
-
-        showToast(
-          error instanceof Error
-            ? error.message
-            : "Could not delete your account. Please try again.",
-        );
-
+      if (error) {
+        showToast(error.message);
         setConfirmAction(null);
-      } finally {
-        setAccountActionLoading(
-          false,
+        return;
+      }
+
+      window.location.href = "/auth";
+    } catch (error) {
+      console.error(
+        "Logout error:",
+        error,
+      );
+
+      showToast(
+        "Could not log out. Please try again.",
+      );
+
+      setConfirmAction(null);
+    } finally {
+      setAccountActionLoading(false);
+    }
+  };
+
+  const requestDeleteAccount = () => {
+    setNotifOpen(false);
+    setSettingsOpen(false);
+    setConfirmAction("delete");
+  };
+
+  const handleDeleteAccount = async () => {
+    setAccountActionLoading(true);
+
+    try {
+      const {
+        data: { session },
+      } =
+        await supabase.auth.getSession();
+
+      if (!session) {
+        window.location.href = "/auth";
+        return;
+      }
+
+      const response = await fetch(
+        "/api/account/delete",
+        {
+          method: "POST",
+          headers: {
+            Authorization:
+              `Bearer ${session.access_token}`,
+          },
+        },
+      );
+
+      const result =
+        await response
+          .json()
+          .catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ||
+          "Could not delete your account.",
         );
       }
-    };
+
+      await supabase.auth.signOut();
+
+      window.location.href = "/auth";
+    } catch (error) {
+      console.error(
+        "Account deletion error:",
+        error,
+      );
+
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Could not delete your account. Please try again.",
+      );
+
+      setConfirmAction(null);
+    } finally {
+      setAccountActionLoading(false);
+    }
+  };
 
   /* ==========================================================
      PHOTO
@@ -1347,7 +1200,6 @@ export default function DashboardPage() {
       );
 
       e.target.value = "";
-
       return;
     }
 
@@ -1360,19 +1212,14 @@ export default function DashboardPage() {
       );
 
       e.target.value = "";
-
       return;
     }
 
     const objectUrl =
-      URL.createObjectURL(
-        file,
-      );
+      URL.createObjectURL(file);
 
     setSelectedPhotoFile(file);
-    setSelectedPhotoSource(
-      objectUrl,
-    );
+    setSelectedPhotoSource(objectUrl);
 
     setCropZoom(1);
     setCropX(0);
@@ -1396,289 +1243,371 @@ export default function DashboardPage() {
     setCropY(0);
 
     if (photoInputRef.current) {
-      photoInputRef.current.value =
-        "";
+      photoInputRef.current.value = "";
     }
   };
 
-  const finalizePhoto =
-    async () => {
-      if (!selectedPhotoSource)
+  const finalizePhoto = async () => {
+    if (!selectedPhotoSource) return;
+
+    setPhotoSaving(true);
+    setPhotoError("");
+
+    try {
+      const {
+        data: { user: authUser },
+      } =
+        await supabase.auth.getUser();
+
+      if (!authUser) {
+        window.location.href = "/auth";
         return;
-
-      setPhotoSaving(true);
-      setPhotoError("");
-
-      try {
-        const {
-          data: { user: authUser },
-        } =
-          await supabase.auth.getUser();
-
-        if (!authUser) {
-          window.location.href =
-            "/auth";
-
-          return;
-        }
-
-        const image =
-          photoImageRef.current;
-
-        if (!image) {
-          throw new Error(
-            "Image could not be loaded.",
-          );
-        }
-
-        const canvas =
-          document.createElement(
-            "canvas",
-          );
-
-        const OUTPUT_SIZE = 800;
-
-        canvas.width =
-          OUTPUT_SIZE;
-
-        canvas.height =
-          OUTPUT_SIZE;
-
-        const ctx =
-          canvas.getContext(
-            "2d",
-          );
-
-        if (!ctx) {
-          throw new Error(
-            "Could not prepare image editor.",
-          );
-        }
-
-        const naturalWidth =
-          image.naturalWidth;
-
-        const naturalHeight =
-          image.naturalHeight;
-
-        if (
-          !naturalWidth ||
-          !naturalHeight
-        ) {
-          throw new Error(
-            "Image dimensions could not be read.",
-          );
-        }
-
-        const baseScale =
-          Math.max(
-            OUTPUT_SIZE /
-            naturalWidth,
-            OUTPUT_SIZE /
-            naturalHeight,
-          );
-
-        const scale =
-          baseScale *
-          cropZoom;
-
-        const drawWidth =
-          naturalWidth *
-          scale;
-
-        const drawHeight =
-          naturalHeight *
-          scale;
-
-        const offsetX =
-          (OUTPUT_SIZE -
-            drawWidth) /
-          2 +
-          (cropX / 100) *
-          OUTPUT_SIZE;
-
-        const offsetY =
-          (OUTPUT_SIZE -
-            drawHeight) /
-          2 +
-          (cropY / 100) *
-          OUTPUT_SIZE;
-
-        ctx.clearRect(
-          0,
-          0,
-          OUTPUT_SIZE,
-          OUTPUT_SIZE,
-        );
-
-        ctx.drawImage(
-          image,
-          offsetX,
-          offsetY,
-          drawWidth,
-          drawHeight,
-        );
-
-        const blob =
-          await new Promise<Blob | null>(
-            (resolve) =>
-              canvas.toBlob(
-                resolve,
-                "image/jpeg",
-                0.9,
-              ),
-          );
-
-        if (!blob) {
-          throw new Error(
-            "Could not create the final image.",
-          );
-        }
-
-        const path = `${authUser.id}/profile.jpg`;
-
-        const {
-          error: uploadError,
-        } =
-          await supabase.storage
-            .from("avatars")
-            .upload(
-              path,
-              blob,
-              {
-                contentType:
-                  "image/jpeg",
-                upsert: true,
-                cacheControl:
-                  "3600",
-              },
-            );
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        const {
-          data: publicUrlData,
-        } =
-          supabase.storage
-            .from("avatars")
-            .getPublicUrl(
-              path,
-            );
-
-        const publicUrl =
-          `${publicUrlData.publicUrl}?v=${Date.now()}`;
-
-        const {
-          error: profileError,
-        } =
-          await supabase
-            .from("profiles")
-            .update({
-              avatar_url:
-                publicUrl,
-            })
-            .eq(
-              "id",
-              authUser.id,
-            );
-
-        if (profileError) {
-          throw profileError;
-        }
-
-        setPhotoPreview(
-          publicUrl,
-        );
-
-        setUser((current) => ({
-          ...current,
-          avatarUrl:
-            publicUrl,
-        }));
-
-        if (selectedPhotoSource) {
-          URL.revokeObjectURL(
-            selectedPhotoSource,
-          );
-        }
-
-        setSelectedPhotoSource(
-          null,
-        );
-
-        setSelectedPhotoFile(
-          null,
-        );
-
-        setCropOpen(false);
-        setCropZoom(1);
-        setCropX(0);
-        setCropY(0);
-
-        if (photoInputRef.current) {
-          photoInputRef.current.value =
-            "";
-        }
-
-        showToast(
-          "Profile photo updated.",
-          "success",
-        );
-      } catch (error) {
-        console.error(
-          "Could not save profile photo:",
-          error,
-        );
-
-        if (
-          error &&
-          typeof error ===
-          "object" &&
-          "message" in error
-        ) {
-          setPhotoError(
-            String(
-              (
-                error as {
-                  message: string;
-                }
-              ).message,
-            ),
-          );
-        } else {
-          setPhotoError(
-            "Could not save the profile photo. Please try again.",
-          );
-        }
-      } finally {
-        setPhotoSaving(false);
       }
-    };
+
+      const image =
+        photoImageRef.current;
+
+      if (!image) {
+        throw new Error(
+          "Image could not be loaded.",
+        );
+      }
+
+      const canvas =
+        document.createElement("canvas");
+
+      const OUTPUT_SIZE = 800;
+
+      canvas.width = OUTPUT_SIZE;
+      canvas.height = OUTPUT_SIZE;
+
+      const ctx =
+        canvas.getContext("2d");
+
+      if (!ctx) {
+        throw new Error(
+          "Could not prepare image editor.",
+        );
+      }
+
+      const naturalWidth =
+        image.naturalWidth;
+
+      const naturalHeight =
+        image.naturalHeight;
+
+      if (
+        !naturalWidth ||
+        !naturalHeight
+      ) {
+        throw new Error(
+          "Image dimensions could not be read.",
+        );
+      }
+
+      const baseScale =
+        Math.max(
+          OUTPUT_SIZE /
+          naturalWidth,
+          OUTPUT_SIZE /
+          naturalHeight,
+        );
+
+      const scale =
+        baseScale * cropZoom;
+
+      const drawWidth =
+        naturalWidth * scale;
+
+      const drawHeight =
+        naturalHeight * scale;
+
+      const offsetX =
+        (OUTPUT_SIZE -
+          drawWidth) /
+        2 +
+        (cropX / 100) *
+        OUTPUT_SIZE;
+
+      const offsetY =
+        (OUTPUT_SIZE -
+          drawHeight) /
+        2 +
+        (cropY / 100) *
+        OUTPUT_SIZE;
+
+      ctx.clearRect(
+        0,
+        0,
+        OUTPUT_SIZE,
+        OUTPUT_SIZE,
+      );
+
+      ctx.drawImage(
+        image,
+        offsetX,
+        offsetY,
+        drawWidth,
+        drawHeight,
+      );
+
+      const blob =
+        await new Promise<Blob | null>(
+          (resolve) =>
+            canvas.toBlob(
+              resolve,
+              "image/jpeg",
+              0.9,
+            ),
+        );
+
+      if (!blob) {
+        throw new Error(
+          "Could not create the final image.",
+        );
+      }
+
+      const path =
+        `${authUser.id}/profile.jpg`;
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from("avatars")
+          .upload(
+            path,
+            blob,
+            {
+              contentType:
+                "image/jpeg",
+              upsert: true,
+              cacheControl: "3600",
+            },
+          );
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const {
+        data: publicUrlData,
+      } =
+        supabase.storage
+          .from("avatars")
+          .getPublicUrl(path);
+
+      const publicUrl =
+        `${publicUrlData.publicUrl}?v=${Date.now()}`;
+
+      const { error: profileError } =
+        await supabase
+          .from("profiles")
+          .update({
+            avatar_url: publicUrl,
+          })
+          .eq("id", authUser.id);
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      setPhotoPreview(publicUrl);
+
+      setUser((current) => ({
+        ...current,
+        avatarUrl: publicUrl,
+      }));
+
+      if (selectedPhotoSource) {
+        URL.revokeObjectURL(
+          selectedPhotoSource,
+        );
+      }
+
+      setSelectedPhotoSource(null);
+      setSelectedPhotoFile(null);
+      setCropOpen(false);
+      setCropZoom(1);
+      setCropX(0);
+      setCropY(0);
+
+      if (photoInputRef.current) {
+        photoInputRef.current.value = "";
+      }
+
+      showToast(
+        "Profile photo updated.",
+        "success",
+      );
+    } catch (error) {
+      console.error(
+        "Could not save profile photo:",
+        error,
+      );
+
+      if (
+        error &&
+        typeof error === "object" &&
+        "message" in error
+      ) {
+        setPhotoError(
+          String(
+            (
+              error as {
+                message: string;
+              }
+            ).message,
+          ),
+        );
+      } else {
+        setPhotoError(
+          "Could not save the profile photo. Please try again.",
+        );
+      }
+    } finally {
+      setPhotoSaving(false);
+    }
+  };
 
   /* ==========================================================
-     DISPLAY VALUES
+     MARK 2 — NAVIGATION
   ========================================================== */
 
-  const streak =
-    getStreakMeta(
-      streakLoading
-        ? 0
-        : streakDays,
+  const handleNavClick = (
+    label: string,
+  ) => {
+    if (label === "Dashboard") {
+      setActiveSection("dashboard");
+      setAddOpen(false);
+      setAddClosing(false);
+
+      localStorage.setItem(
+        "learnmate-active-section",
+        "dashboard",
+      );
+
+      return;
+    }
+
+    if (label === "My Courses") {
+      setActiveSection("courses");
+      setAddOpen(false);
+      setAddClosing(false);
+
+      localStorage.setItem(
+        "learnmate-active-section",
+        "courses",
+      );
+
+      return;
+    }
+
+    showToast(
+      "This Feature will be added in MARK3 Update",
+      "error",
+    );
+  };
+
+  /* ==========================================================
+     MARK 2 — ADD COURSE
+  ========================================================== */
+
+  const openAddCourse = () => {
+    setAddClosing(false);
+    setAddOpen(true);
+    setSelectedClass(null);
+    setSelectedSubject(null);
+    setAddControlsReady(false);
+  };
+
+  const cancelAddCourse = () => {
+    if (addClosing) return;
+
+    setAddClosing(true);
+    setAddControlsReady(false);
+
+    window.setTimeout(() => {
+      setAddOpen(false);
+      setAddClosing(false);
+      setSelectedClass(null);
+      setSelectedSubject(null);
+    }, 320);
+  };
+
+  const addCourse = () => {
+    if (!selectedClass) {
+      showToast(
+        "Please select your class.",
+        "error",
+      );
+      return;
+    }
+
+    if (!selectedSubject) {
+      showToast(
+        "Please select your subject.",
+        "error",
+      );
+      return;
+    }
+
+    const newCourse: Course = {
+      id: `${Date.now()}-${selectedClass}-${selectedSubject}`,
+      title: `${selectedSubject} — ${selectedClass}`,
+      class: selectedClass,
+      subject: selectedSubject,
+      progress: 0,
+    };
+
+    setCourses((current) => [
+      ...current,
+      newCourse,
+    ]);
+
+    showToast(
+      "Course added successfully.",
+      "success",
     );
 
-  const welcomeText =
-    user.name
-      ? `Welcome back, ${user.name}`
-      : "Welcome back";
+    setAddOpen(false);
+    setAddClosing(false);
+    setSelectedClass(null);
+    setSelectedSubject(null);
+  };
 
-  const typedWelcome =
+  /* ==========================================================
+     DISPLAY
+  ========================================================== */
+
+  const streak = getStreakMeta(
+    streakLoading ? 0 : streakDays,
+  );
+
+  const welcomeText = user.name
+    ? `Welcome back, ${user.name}`
+    : "Welcome back";
+
+  const typedWelcome = useTypewriter(
+    welcomeText,
+    48,
+    !profileLoading &&
+    !needsNameSetup &&
+    activeSection === "dashboard",
+  );
+
+  const typedCoursesHeading =
     useTypewriter(
-      welcomeText,
-      48,
-      !profileLoading &&
-      !needsNameSetup,
+      "My Courses",
+      55,
+      activeSection === "courses" &&
+      !addOpen &&
+      !addClosing,
+    );
+
+  const typedAddHeading =
+    useTypewriter(
+      "Add a new course",
+      55,
+      addOpen || addClosing,
     );
 
   const initial = (
@@ -1709,10 +1638,6 @@ export default function DashboardPage() {
       <style>{CSS}</style>
 
       <div className="lm">
-        {/* ==================================================
-            MOBILE SIDEBAR SCRIM
-        ================================================== */}
-
         <div
           className={
             menuOpen
@@ -1726,9 +1651,7 @@ export default function DashboardPage() {
         />
 
         <div className="app">
-          {/* ==================================================
-              SIDEBAR
-          ================================================== */}
+          {/* SIDEBAR */}
 
           <aside
             className={
@@ -1756,54 +1679,54 @@ export default function DashboardPage() {
               className="nav"
               aria-label="Sections"
             >
-              {NAV_ITEMS.map(
-                (n) => (
-                  <a
-                    key={n.label}
-                    href="#"
+              {NAV_ITEMS.map((item) => {
+                const active =
+                  (activeSection ===
+                    "dashboard" &&
+                    item.label ===
+                    "Dashboard") ||
+                  (activeSection ===
+                    "courses" &&
+                    item.label ===
+                    "My Courses");
+
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
                     className={
-                      n.active
-                        ? "active"
-                        : ""
-                    }
-                    aria-current={
-                      n.active
-                        ? "page"
-                        : undefined
+                      active
+                        ? "nav-link active"
+                        : "nav-link"
                     }
                     onClick={() => {
-                      if (
-                        window.innerWidth <=
-                        860
-                      ) {
-                        setMenuOpen(
-                          false,
-                        );
-                      }
+                      setMenuOpen(false);
+                      setNotifOpen(false);
+                      handleNavClick(
+                        item.label,
+                      );
                     }}
                   >
                     <span
-                      className="e"
                       aria-hidden="true"
                     >
-                      {n.emoji}
+                      {item.emoji}
                     </span>
 
-                    {n.label}
-                  </a>
-                ),
-              )}
+                    <span>
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
             </nav>
 
             <div className="side-foot">
               <button
                 type="button"
-                onClick={
-                  openSettings
-                }
+                onClick={openSettings}
               >
                 <span
-                  className="e"
                   aria-hidden="true"
                 >
                   ⚙️
@@ -1815,9 +1738,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="profile-chip"
-                onClick={
-                  openSettings
-                }
+                onClick={openSettings}
                 aria-label="Open profile settings"
               >
                 {photoPreview ||
@@ -1858,12 +1779,8 @@ export default function DashboardPage() {
             </div>
           </aside>
 
-          {/* ==================================================
-              MAIN
-          ================================================== */}
-
           <main className="main">
-            {/* TOP BAR */}
+            {/* TOPBAR */}
 
             <div className="topbar reveal">
               <div className="top-left">
@@ -1871,46 +1788,66 @@ export default function DashboardPage() {
                   type="button"
                   className="icon-btn menu-btn"
                   onClick={() =>
-                    setMenuOpen(
-                      true,
-                    )
+                    setMenuOpen(true)
                   }
                   aria-label="Open menu"
                 >
                   ☰
                 </button>
 
-                <div>
-                  <h1 className="h1">
-                    {typedWelcome}
+                {activeSection ===
+                  "dashboard" ? (
+                  <div>
+                    <h1 className="h1">
+                      {typedWelcome}
 
-                    <span className="type-cursor">
-                      |
-                    </span>
-                  </h1>
+                      <span className="type-cursor">
+                        |
+                      </span>
+                    </h1>
 
-                  <p className="sub">
-                    {welcomeSubtext}
-                  </p>
-                </div>
+                    <p className="sub">
+                      {welcomeSubtext}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="courses-heading-wrap">
+                    {!addOpen &&
+                      !addClosing && (
+                        <h1 className="h1">
+                          {typedCoursesHeading}
+
+                          <span className="type-cursor">
+                            |
+                          </span>
+                        </h1>
+                      )}
+
+                    {addOpen &&
+                      !addClosing && (
+                        <h1 className="h1">
+                          {typedAddHeading}
+
+                          <span className="type-cursor">
+                            |
+                          </span>
+                        </h1>
+                      )}
+                  </div>
+                )}
               </div>
 
               <div className="top-actions">
-                {/* DESKTOP THEME TOGGLE */}
-
                 <div className="desktop-theme-toggle">
                   <button
                     type="button"
                     className="theme-switch"
                     role="switch"
                     aria-checked={
-                      theme ===
-                      "dark"
+                      theme === "dark"
                     }
                     aria-label="Toggle dark mode"
-                    onClick={
-                      toggleTheme
-                    }
+                    onClick={toggleTheme}
                   >
                     <span className="theme-orb">
                       {theme ===
@@ -1919,14 +1856,7 @@ export default function DashboardPage() {
                         : "☀"}
                     </span>
 
-                    <span
-                      className={
-                        theme ===
-                          "dark"
-                          ? "theme-label dark-active"
-                          : "theme-label"
-                      }
-                    >
+                    <span className="theme-label">
                       {theme ===
                         "dark"
                         ? "Dark"
@@ -1934,8 +1864,6 @@ export default function DashboardPage() {
                     </span>
                   </button>
                 </div>
-
-                {/* NOTIFICATIONS */}
 
                 <button
                   type="button"
@@ -1945,9 +1873,7 @@ export default function DashboardPage() {
                   aria-expanded={
                     notifOpen
                   }
-                  onClick={(
-                    e,
-                  ) => {
+                  onClick={(e) => {
                     e.stopPropagation();
 
                     setSettingsOpen(
@@ -1955,9 +1881,7 @@ export default function DashboardPage() {
                     );
 
                     setNotifOpen(
-                      (
-                        value,
-                      ) =>
+                      (value) =>
                         !value,
                     );
                   }}
@@ -1971,26 +1895,17 @@ export default function DashboardPage() {
 
                   {notifs.length >
                     0 && (
-                      <span
-                        className="dot"
-                        aria-label={`${notifs.length} new`}
-                      >
-                        {
-                          notifs.length
-                        }
+                      <span className="dot">
+                        {notifs.length}
                       </span>
                     )}
                 </button>
-
-                {/* PROFILE */}
 
                 <button
                   type="button"
                   className="avatar"
                   aria-label="Profile"
-                  onClick={(
-                    e,
-                  ) => {
+                  onClick={(e) => {
                     e.stopPropagation();
 
                     setNotifOpen(
@@ -2002,9 +1917,7 @@ export default function DashboardPage() {
                     );
 
                     setSettingsOpen(
-                      (
-                        value,
-                      ) =>
+                      (value) =>
                         !value,
                     );
                   }}
@@ -2020,7 +1933,7 @@ export default function DashboardPage() {
                       alt="Profile photo"
                     />
                   ) : (
-                    <span aria-hidden="true">
+                    <span>
                       {initial}
                     </span>
                   )}
@@ -2028,9 +1941,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* ==================================================
-                NOTIFICATION POPUP
-            ================================================== */}
+            {/* NOTIFICATIONS */}
 
             {notifOpen && (
               <div
@@ -2059,15 +1970,13 @@ export default function DashboardPage() {
                         key={i}
                         className="notif"
                       >
-                        <span aria-hidden="true">
+                        <span>
                           🔔
                         </span>
 
                         <span>
                           <b>
-                            {
-                              n.title
-                            }
+                            {n.title}
                           </b>
 
                           <br />
@@ -2091,322 +2000,761 @@ export default function DashboardPage() {
             )}
 
             {/* ==================================================
-                STATISTICS
+                DASHBOARD
             ================================================== */}
 
-            <section
-              className="stats"
-              aria-label="Overview"
-            >
-              <div className="card stat reveal d1">
-                <ProgressRing
-                  value={
-                    MOCK_OVERALL_PROGRESS
-                  }
-                  animate
-                />
-
-                <div>
-                  <b className="t">
-                    Overall
-                    Progress
-                  </b>
-
-                  <small>
-                    Across all
-                    courses
-                  </small>
-                </div>
-              </div>
-
-              {/* STREAK CARD */}
-
-              <div className="card stat reveal d2">
-                <div
-                  className="streak-visual"
-                  aria-hidden="true"
-                >
-                  {streak.gif &&
-                    streakImgOk && (
-                      <img
-                        src={
-                          streak.gif
+            {activeSection ===
+              "dashboard" && (
+                <>
+                  <section
+                    className="stats"
+                    aria-label="Overview"
+                  >
+                    <div className="card stat reveal d1">
+                      <ProgressRing
+                        value={
+                          MOCK_OVERALL_PROGRESS
                         }
-                        alt=""
-                        onError={() =>
-                          setStreakImgOk(
-                            false,
-                          )
-                        }
+                        animate
                       />
-                    )}
 
-                  {(!streak.gif ||
-                    !streakImgOk) && (
-                      <span className="streak-emoji">
-                        {
-                          streak.emoji
-                        }
-                      </span>
-                    )}
-                </div>
+                      <div>
+                        <b className="t">
+                          Overall Progress
+                        </b>
 
-                <div>
-                  <b className="t">
-                    Streak
-                  </b>
+                        <small>
+                          Across all courses
+                        </small>
+                      </div>
+                    </div>
 
-                  <div className="big">
-                    {streakLoading
-                      ? "..."
-                      : streak.title}
+                    <div className="card stat reveal d2">
+                      <div
+                        className="streak-visual"
+                        aria-hidden="true"
+                      >
+                        {streak.gif &&
+                          streakImgOk && (
+                            <img
+                              src={
+                                streak.gif
+                              }
+                              alt=""
+                              onError={() =>
+                                setStreakImgOk(
+                                  false,
+                                )
+                              }
+                            />
+                          )}
+
+                        {(!streak.gif ||
+                          !streakImgOk) && (
+                            <span className="streak-emoji">
+                              {
+                                streak.emoji
+                              }
+                            </span>
+                          )}
+                      </div>
+
+                      <div>
+                        <b className="t">
+                          Streak
+                        </b>
+
+                        <div className="big">
+                          {streakLoading
+                            ? "..."
+                            : streak.title}
+                        </div>
+
+                        <small>
+                          {streakLoading
+                            ? "Loading streak"
+                            : streak.sub}
+                        </small>
+                      </div>
+                    </div>
+
+                    <div className="card stat reveal d3">
+                      <div
+                        className="stat-ic"
+                        aria-hidden="true"
+                      >
+                        🕒
+                      </div>
+
+                      <div>
+                        <b className="t small-label">
+                          Study Time
+                        </b>
+
+                        <div className="big">
+                          {
+                            MOCK_STUDY_TIME
+                          }
+                        </div>
+
+                        <small>
+                          This week
+                        </small>
+                      </div>
+                    </div>
+
+                    <div className="card stat reveal d4">
+                      <div
+                        className="stat-ic"
+                        aria-hidden="true"
+                      >
+                        📖
+                      </div>
+
+                      <div>
+                        <b className="t small-label">
+                          Courses
+                        </b>
+
+                        <div className="big">
+                          {
+                            courses.filter(
+                              (course) =>
+                                course.progress <
+                                100,
+                            ).length
+                          }{" "}
+                          active
+                          courses
+                        </div>
+
+                        <small>
+                          Add your first
+                          course
+                        </small>
+                      </div>
+                    </div>
+                  </section>
+
+                  <div className="grid">
+                    <div className="col">
+                      <section
+                        className="hero reveal d2"
+                        aria-label="Continue learning"
+                      >
+                        <div className="hero-head">
+                          <span>
+                            📖
+                          </span>
+
+                          Continue
+                          Learning
+                        </div>
+
+                        <div className="hero-body">
+                          <div className="empty-course">
+                            <div className="empty-course-icon">
+                              📚
+                            </div>
+
+                            <div className="hero-info">
+                              <h3>
+                                Add New
+                                Course
+                              </h3>
+
+                              <p className="empty-course-text">
+                                add new
+                                course to
+                                continue
+                                learning
+                              </p>
+
+                              <div className="bar">
+                                <i
+                                  style={{
+                                    width:
+                                      "0%",
+                                  }}
+                                />
+                              </div>
+
+                              <div className="hero-meta">
+                                <span className="empty-course-text">
+                                  No course
+                                  added yet
+                                </span>
+
+                                <span className="pct">
+                                  0%
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              className="btn-cream"
+                              onClick={() => {
+                                setActiveSection(
+                                  "courses",
+                                );
+
+                                localStorage.setItem(
+                                  "learnmate-active-section",
+                                  "courses",
+                                );
+
+                                openAddCourse();
+                              }}
+                            >
+                              Add Course{" "}
+                              <span>
+                                →
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      </section>
+
+                      <section
+                        className="perf3 reveal d4"
+                        aria-label="Performance"
+                      >
+                        <div className="card pad">
+                          <h3>
+                            📊 Your
+                            Performance
+                          </h3>
+
+                          <div className="empty-section">
+                            add new
+                            course
+                          </div>
+                        </div>
+
+                        <div className="card pad">
+                          <h3>
+                            ⭐ Strong
+                            Topics
+                          </h3>
+
+                          <div className="empty-section">
+                            add new
+                            course
+                          </div>
+                        </div>
+
+                        <div className="card pad needs-attention-card">
+                          <h3 className="warn-title">
+                            ⚠️ Needs
+                            Attention
+                          </h3>
+
+                          <div className="empty-section">
+                            add new
+                            course
+                          </div>
+                        </div>
+                      </section>
+
+                      <section
+                        className="card pad reveal d5"
+                        aria-label="Upcoming tests"
+                      >
+                        <div className="sec-head">
+                          <h3>
+                            🗓️ Upcoming
+                            Tests
+                          </h3>
+
+                          <a
+                            className="link"
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+
+                              showToast(
+                                "This Feature will be added in MARK3 Update",
+                                "error",
+                              );
+                            }}
+                          >
+                            View all →
+                          </a>
+                        </div>
+
+                        <div className="empty-section">
+                          add new course
+                        </div>
+                      </section>
+
+                      <section
+                        className="card journey reveal d5"
+                        aria-label="Learning journey"
+                      >
+                        <b>
+                          📖 LEARNING
+                          JOURNEY
+                        </b>
+
+                        <span className="empty-section">
+                          add new course
+                        </span>
+                      </section>
+                    </div>
                   </div>
-
-                  <small>
-                    {streakLoading
-                      ? "Loading streak"
-                      : streak.sub}
-                  </small>
-                </div>
-              </div>
-
-              <div className="card stat reveal d3">
-                <div
-                  className="stat-ic"
-                  aria-hidden="true"
-                >
-                  🕒
-                </div>
-
-                <div>
-                  <b className="t small-label">
-                    Study Time
-                  </b>
-
-                  <div className="big">
-                    {
-                      MOCK_STUDY_TIME
-                    }
-                  </div>
-
-                  <small>
-                    This week
-                  </small>
-                </div>
-              </div>
-
-              <div className="card stat reveal d4">
-                <div
-                  className="stat-ic"
-                  aria-hidden="true"
-                >
-                  📖
-                </div>
-
-                <div>
-                  <b className="t small-label">
-                    Courses
-                  </b>
-
-                  <div className="big">
-                    0 active
-                    courses
-                  </div>
-
-                  <small>
-                    Add your
-                    first course
-                  </small>
-                </div>
-              </div>
-            </section>
+                </>
+              )}
 
             {/* ==================================================
-                MAIN GRID
+                MY COURSES
             ================================================== */}
 
-            <div className="grid">
-              <div className="col">
-                {/* CONTINUE LEARNING */}
-
+            {activeSection ===
+              "courses" && (
                 <section
-                  className="hero reveal d2"
-                  aria-label="Continue learning"
+                  className="courses-page"
+                  aria-label="My Courses"
                 >
-                  <div className="hero-head">
-                    <span aria-hidden="true">
-                      📖
-                    </span>
-
-                    Continue
-                    Learning
-                  </div>
-
-                  <div className="hero-body">
-                    <div className="empty-course">
-                      <div className="empty-course-icon">
-                        📚
-                      </div>
-
-                      <div className="hero-info">
-                        <h3>
-                          Add New
-                          Course
-                        </h3>
-
-                        <p className="empty-course-text">
-                          add new
-                          course to
-                          continue
-                          learning
-                        </p>
-
-                        <div className="bar">
-                          <i
-                            style={{
-                              width:
-                                "0%",
-                            }}
-                          />
-                        </div>
-
-                        <div className="hero-meta">
-                          <span className="empty-course-text">
-                            No course
-                            added yet
-                          </span>
-
-                          <span className="pct">
-                            0%
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="btn-cream"
+                  {!addOpen &&
+                    !addClosing && (
+                      <div
+                        className={
+                          coursesContentReady
+                            ? "courses-content courses-content-visible"
+                            : "courses-content"
+                        }
                       >
-                        Add Course{" "}
-                        <span aria-hidden="true">
-                          →
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </section>
+                        <div className="courses-heading-row">
+                          <div />
 
-                {/* PERFORMANCE */}
+                          <button
+                            type="button"
+                            className="btn-brown add-course-top"
+                            onClick={
+                              openAddCourse
+                            }
+                          >
+                            + Add Course
+                          </button>
+                        </div>
 
-                <section
-                  className="perf3 reveal d4"
-                  aria-label="Performance"
-                >
-                  <div className="card pad">
-                    <h3>
-                      <span aria-hidden="true">
-                        📊
-                      </span>
+                        <div className="course-tabs">
+                          <div className="course-tab active">
+                            Ongoing
+                            <span>
+                              {
+                                ongoingCourses.length
+                              }
+                            </span>
+                          </div>
 
-                      Your
-                      Performance
-                    </h3>
+                          <div className="course-tab">
+                            Completed
+                            <span>
+                              {
+                                completedCourses.length
+                              }
+                            </span>
+                          </div>
+                        </div>
 
-                    <div className="empty-section">
-                      add new
-                      course
-                    </div>
-                  </div>
+                        <section className="courses-section">
+                          <div className="courses-section-head">
+                            <h2>
+                              Ongoing
+                            </h2>
 
-                  <div className="card pad">
-                    <h3>
-                      <span aria-hidden="true">
-                        ⭐
-                      </span>
+                            <span>
+                              0–99%
+                            </span>
+                          </div>
 
-                      Strong
-                      Topics
-                    </h3>
+                          {ongoingCourses.length ===
+                            0 ? (
+                            <div className="courses-empty">
+                              <span>
+                                Add new courses
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="courses-list">
+                              {ongoingCourses.map(
+                                (
+                                  course,
+                                ) => (
+                                  <article
+                                    key={
+                                      course.id
+                                    }
+                                    className="course-card"
+                                  >
+                                    <div className="course-card-top">
+                                      <div className="course-subject-icon">
+                                        {course.subject ===
+                                          "Mathematics"
+                                          ? "∑"
+                                          : course.subject ===
+                                            "Science"
+                                            ? "⚗"
+                                            : course.subject ===
+                                              "Information Technology"
+                                              ? "⌘"
+                                              : course.subject ===
+                                                "Social Science"
+                                                ? "🌍"
+                                                : "A"}
+                                      </div>
 
-                    <div className="empty-section">
-                      add new
-                      course
-                    </div>
-                  </div>
+                                      <div className="course-card-title">
+                                        <h3>
+                                          {
+                                            course.subject
+                                          }
+                                        </h3>
 
-                  <div className="card pad needs-attention-card">
-                    <h3 className="warn-title">
-                      <span aria-hidden="true">
-                        ⚠️
-                      </span>
+                                        <p>
+                                          {
+                                            course.class
+                                          }
+                                        </p>
+                                      </div>
 
-                      Needs
-                      Attention
-                    </h3>
+                                      <span className="course-status">
+                                        Ongoing
+                                      </span>
+                                    </div>
 
-                    <div className="empty-section">
-                      add new
-                      course
-                    </div>
-                  </div>
-                </section>
+                                    <div className="course-progress">
+                                      <div className="course-progress-row">
+                                        <span>
+                                          Progress
+                                        </span>
 
-                {/* UPCOMING TESTS */}
+                                        <b>
+                                          {
+                                            course.progress
+                                          }
+                                          %
+                                        </b>
+                                      </div>
 
-                <section
-                  className="card pad reveal d5"
-                  aria-label="Upcoming tests"
-                >
-                  <div className="sec-head">
-                    <h3>
-                      <span aria-hidden="true">
-                        🗓️
-                      </span>
+                                      <div className="course-progress-track">
+                                        <i
+                                          style={{
+                                            width: `${course.progress}%`,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
 
-                      Upcoming
-                      Tests
-                    </h3>
+                                    <div className="course-card-bottom">
+                                      <span>
+                                        {
+                                          course.class
+                                        }
+                                      </span>
 
-                    <a
-                      className="link"
-                      href="#"
+                                      <button
+                                        type="button"
+                                        className="course-open-btn"
+                                        onClick={() =>
+                                          showToast(
+                                            "This Feature will be added in MARK3 Update",
+                                            "error",
+                                          )
+                                        }
+                                      >
+                                        Open →
+                                      </button>
+                                    </div>
+                                  </article>
+                                ),
+                              )}
+                            </div>
+                          )}
+                        </section>
+
+                        <section className="courses-section">
+                          <div className="courses-section-head">
+                            <h2>
+                              Completed
+                            </h2>
+
+                            <span>
+                              100%
+                            </span>
+                          </div>
+
+                          {completedCourses.length ===
+                            0 ? (
+                            <div className="courses-empty">
+                              <span>
+                                Add new courses
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="courses-list">
+                              {completedCourses.map(
+                                (
+                                  course,
+                                ) => (
+                                  <article
+                                    key={
+                                      course.id
+                                    }
+                                    className="course-card"
+                                  >
+                                    <div className="course-card-top">
+                                      <div className="course-subject-icon">
+                                        ✓
+                                      </div>
+
+                                      <div className="course-card-title">
+                                        <h3>
+                                          {
+                                            course.subject
+                                          }
+                                        </h3>
+
+                                        <p>
+                                          {
+                                            course.class
+                                          }
+                                        </p>
+                                      </div>
+
+                                      <span className="course-status">
+                                        Completed
+                                      </span>
+                                    </div>
+
+                                    <div className="course-progress">
+                                      <div className="course-progress-row">
+                                        <span>
+                                          Progress
+                                        </span>
+
+                                        <b>
+                                          100%
+                                        </b>
+                                      </div>
+
+                                      <div className="course-progress-track">
+                                        <i
+                                          style={{
+                                            width:
+                                              "100%",
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="course-card-bottom">
+                                      <span>
+                                        {
+                                          course.class
+                                        }
+                                      </span>
+
+                                      <button
+                                        type="button"
+                                        className="course-open-btn"
+                                        onClick={() =>
+                                          showToast(
+                                            "This Feature will be added in MARK3 Update",
+                                            "error",
+                                          )
+                                        }
+                                      >
+                                        Open →
+                                      </button>
+                                    </div>
+                                  </article>
+                                ),
+                              )}
+                            </div>
+                          )}
+                        </section>
+                      </div>
+                    )}
+
+                  {addOpen && (
+                    <div
+                      className={
+                        addClosing
+                          ? "add-course-page add-course-closing"
+                          : "add-course-page"
+                      }
                     >
-                      View all{" "}
-                      <span aria-hidden="true">
-                        →
-                      </span>
-                    </a>
-                  </div>
+                      <div className="add-course-heading">
+                        <h1 className="h1">
+                          {typedAddHeading}
 
-                  <div className="empty-section">
-                    add new
-                    course
-                  </div>
+                          <span className="type-cursor">
+                            |
+                          </span>
+                        </h1>
+                      </div>
+
+                      <div
+                        className={
+                          addControlsReady
+                            ? "add-course-controls add-course-controls-visible"
+                            : "add-course-controls"
+                        }
+                      >
+                        <section className="course-selector-section">
+                          <div className="course-selector-title">
+                            <h3>
+                              Select your
+                              class
+                            </h3>
+
+                            <span>
+                              {selectedClass ||
+                                "Choose one"}
+                            </span>
+                          </div>
+
+                          <div className="class-grid">
+                            {CLASSES.map(
+                              (item) => (
+                                <button
+                                  key={item}
+                                  type="button"
+                                  className={
+                                    selectedClass ===
+                                      item
+                                      ? "class-option selected"
+                                      : "class-option"
+                                  }
+                                  onClick={() =>
+                                    setSelectedClass(
+                                      item,
+                                    )
+                                  }
+                                >
+                                  {item}
+
+                                  {selectedClass ===
+                                    item && (
+                                      <span>
+                                        ✓
+                                      </span>
+                                    )}
+                                </button>
+                              ),
+                            )}
+                          </div>
+                        </section>
+
+                        <section className="course-selector-section">
+                          <div className="course-selector-title">
+                            <h3>
+                              Select your
+                              subject
+                            </h3>
+
+                            <span>
+                              {selectedSubject ||
+                                "Choose one"}
+                            </span>
+                          </div>
+
+                          <div className="subject-grid">
+                            {SUBJECTS.map(
+                              (subject) => (
+                                <button
+                                  key={
+                                    subject
+                                  }
+                                  type="button"
+                                  className={
+                                    selectedSubject ===
+                                      subject
+                                      ? "subject-option selected"
+                                      : "subject-option"
+                                  }
+                                  onClick={() =>
+                                    setSelectedSubject(
+                                      subject,
+                                    )
+                                  }
+                                >
+                                  <span>
+                                    {subject ===
+                                      "Mathematics"
+                                      ? "∑"
+                                      : subject ===
+                                        "Science"
+                                        ? "⚗"
+                                        : subject ===
+                                          "Information Technology"
+                                          ? "⌘"
+                                          : subject ===
+                                            "Social Science"
+                                            ? "🌍"
+                                            : "A"}
+                                  </span>
+
+                                  <b>
+                                    {
+                                      subject
+                                    }
+                                  </b>
+
+                                  {selectedSubject ===
+                                    subject && (
+                                      <i>
+                                        ✓
+                                      </i>
+                                    )}
+                                </button>
+                              ),
+                            )}
+                          </div>
+                        </section>
+
+                        <div className="add-course-actions">
+                          <button
+                            type="button"
+                            className="add-course-cancel"
+                            onClick={
+                              cancelAddCourse
+                            }
+                            disabled={
+                              addClosing
+                            }
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            type="button"
+                            className="add-course-save"
+                            onClick={
+                              addCourse
+                            }
+                            disabled={
+                              addClosing
+                            }
+                          >
+                            Add Course
+                            <span>
+                              →
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </section>
-
-                {/* LEARNING JOURNEY */}
-
-                <section
-                  className="card journey reveal d5"
-                  aria-label="Learning journey"
-                >
-                  <b>
-                    📖 LEARNING
-                    JOURNEY
-                  </b>
-
-                  <span className="empty-section">
-                    add new
-                    course
-                  </span>
-                </section>
-              </div>
-            </div>
+              )}
           </main>
         </div>
 
-        {/* ======================================================
-            SETTINGS / PROFILE CONFIGURATION
-        ====================================================== */}
+        {/* SETTINGS */}
 
         {settingsOpen && (
           <div
@@ -2416,10 +2764,7 @@ export default function DashboardPage() {
                 e.target ===
                 e.currentTarget
               ) {
-                setSettingsOpen(
-                  false,
-                );
-
+                setSettingsOpen(false);
                 setSettingsView(
                   "main",
                 );
@@ -2433,10 +2778,6 @@ export default function DashboardPage() {
               aria-modal="true"
               aria-label="Settings"
             >
-              {/* ==================================================
-                  SETTINGS MAIN VIEW
-              ================================================== */}
-
               {settingsView ===
                 "main" && (
                   <>
@@ -2474,8 +2815,6 @@ export default function DashboardPage() {
                     </header>
 
                     <div className="body">
-                      {/* PROFILE PREVIEW */}
-
                       <div className="settings-profile">
                         <div className="settings-avatar">
                           {photoPreview ||
@@ -2490,9 +2829,7 @@ export default function DashboardPage() {
                             />
                           ) : (
                             <span>
-                              {
-                                initial
-                              }
+                              {initial}
                             </span>
                           )}
                         </div>
@@ -2504,18 +2841,14 @@ export default function DashboardPage() {
                           </b>
 
                           <small>
-                            Profile
-                            photo
+                            Profile photo
                           </small>
                         </div>
                       </div>
 
-                      {/* NAME */}
-
                       <div className="settings-value-section">
                         <label>
-                          LearnMate
-                          name
+                          LearnMate name
                         </label>
 
                         <div className="settings-value">
@@ -2544,8 +2877,6 @@ export default function DashboardPage() {
                           name?
                         </button>
                       </div>
-
-                      {/* EMAIL */}
 
                       <div className="settings-value-section">
                         <label>
@@ -2580,8 +2911,6 @@ export default function DashboardPage() {
                         </button>
                       </div>
 
-                      {/* PROFILE PHOTO */}
-
                       <div className="field">
                         <label>
                           Profile photo
@@ -2614,7 +2943,7 @@ export default function DashboardPage() {
                               : "Upload profile photo"}
                           </span>
 
-                          <span aria-hidden="true">
+                          <span>
                             ↑
                           </span>
                         </button>
@@ -2633,14 +2962,11 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* MOBILE DARK MODE */}
-
                       <div className="switch mobile-theme-setting">
                         <span>
                           Dark mode{" "}
                           <small className="muted-text">
-                            Theme
-                            preference
+                            Theme preference
                           </small>
                         </span>
 
@@ -2672,10 +2998,6 @@ export default function DashboardPage() {
                           </span>
                         </button>
                       </div>
-
-                      {/* ==================================================
-                        DANGER ZONE
-                    ================================================== */}
 
                       <section className="danger-zone">
                         <div className="danger-title">
@@ -2712,22 +3034,28 @@ export default function DashboardPage() {
                         </div>
                       </section>
 
-                      {/* ACTIONS */}
-
                       <div className="row2">
                         <button
                           type="button"
                           className="btn-cream bordered"
-                          onClick={saveSettings}
-                          disabled={settingsSaving}
+                          onClick={
+                            saveSettings
+                          }
+                          disabled={
+                            settingsSaving
+                          }
                         >
-                          {settingsSaving ? "Saving..." : "Save"}
+                          {settingsSaving
+                            ? "Saving..."
+                            : "Save"}
                         </button>
 
                         <button
                           type="button"
                           className="btn-brown centered"
-                          onClick={requestLogout}
+                          onClick={
+                            requestLogout
+                          }
                         >
                           Log out
                         </button>
@@ -2736,477 +3064,640 @@ export default function DashboardPage() {
                   </>
                 )}
 
-              {/* ==================================================
-                    CHANGE NAME VIEW
-                ================================================== */}
-              {settingsView === "name" && (
-                <div className="settings-change-view">
-                  <header>
-                    <button
-                      type="button"
-                      className="settings-back"
-                      onClick={() => setSettingsView("main")}
-                    >
-                      ← Back
-                    </button>
-
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => {
-                        setSettingsOpen(false);
-                        setSettingsView("main");
-                      }}
-                      aria-label="Close settings"
-                    >
-                      ✕
-                    </button>
-                  </header>
-
-                  <div className="settings-change-content">
-                    <h2>
-                      <TypewriterHeading text="Set your new LearnMate name" />
-                    </h2>
-
-                    <p>
-                      Choose the name you want LearnMate to use when
-                      welcoming you.
-                    </p>
-
-                    <input
-                      autoFocus
-                      value={nameDraft}
-                      onChange={(e) => {
-                        setNameDraft(e.target.value);
-                        setSettingsError("");
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !settingsSaving) {
-                          changeLearnMateName();
+              {settingsView ===
+                "name" && (
+                  <div className="settings-change-view">
+                    <header>
+                      <button
+                        type="button"
+                        className="settings-back"
+                        onClick={() =>
+                          setSettingsView(
+                            "main",
+                          )
                         }
-                      }}
-                      placeholder="Enter your new name"
-                      maxLength={40}
-                    />
+                      >
+                        ← Back
+                      </button>
 
-                    <button
-                      type="button"
-                      className="btn-brown name-save"
-                      onClick={changeLearnMateName}
-                      disabled={settingsSaving}
-                    >
-                      {settingsSaving ? "Saving..." : "Save name"}
-                      {!settingsSaving && (
-                        <span aria-hidden="true">→</span>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          setSettingsOpen(
+                            false,
+                          );
 
-              {/* ==================================================
-                    CHANGE EMAIL VIEW
-                ================================================== */}
-              {settingsView === "email" && (
-                <div className="settings-change-view">
-                  <header>
-                    <button
-                      type="button"
-                      className="settings-back"
-                      onClick={() => setSettingsView("main")}
-                    >
-                      ← Back
-                    </button>
+                          setSettingsView(
+                            "main",
+                          );
+                        }}
+                        aria-label="Close settings"
+                      >
+                        ✕
+                      </button>
+                    </header>
 
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => {
-                        setSettingsOpen(false);
-                        setSettingsView("main");
-                      }}
-                      aria-label="Close settings"
-                    >
-                      ✕
-                    </button>
-                  </header>
+                    <div className="settings-change-content">
+                      <h2>
+                        <TypewriterHeading text="Set your new LearnMate name" />
+                      </h2>
 
-                  <div className="settings-change-content">
-                    <h2>
-                      <TypewriterHeading text="Enter your new email" />
-                    </h2>
+                      <p>
+                        Choose the name you want LearnMate to use when welcoming you.
+                      </p>
 
-                    <p>
-                      Enter the email address you want to use with your
-                      LearnMate account.
-                    </p>
-
-                    <input
-                      autoFocus
-                      type="email"
-                      value={emailDraft}
-                      onChange={(e) => {
-                        setEmailDraft(e.target.value);
-                        setSettingsError("");
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !settingsSaving) {
-                          changeEmail();
+                      <input
+                        autoFocus
+                        value={
+                          nameDraft
                         }
-                      }}
-                      placeholder="Enter your new email"
-                      maxLength={120}
-                    />
+                        onChange={(e) => {
+                          setNameDraft(
+                            e.target.value,
+                          );
 
-                    <p className="email-change-note">
-                      You may need to confirm the new email from your inbox.
-                    </p>
+                          setSettingsError(
+                            "",
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key ===
+                            "Enter" &&
+                            !settingsSaving
+                          ) {
+                            changeLearnMateName();
+                          }
+                        }}
+                        placeholder="Enter your new name"
+                        maxLength={40}
+                      />
 
-                    <button
-                      type="button"
-                      className="btn-brown name-save"
-                      onClick={changeEmail}
-                      disabled={settingsSaving}
-                    >
-                      {settingsSaving ? "Updating..." : "Change email"}
-                      {!settingsSaving && (
-                        <span aria-hidden="true">→</span>
-                      )}
-                    </button>
+                      <button
+                        type="button"
+                        className="btn-brown name-save"
+                        onClick={
+                          changeLearnMateName
+                        }
+                        disabled={
+                          settingsSaving
+                        }
+                      >
+                        {settingsSaving
+                          ? "Saving..."
+                          : "Save name"}
+
+                        {!settingsSaving && (
+                          <span>
+                            →
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+
+              {settingsView ===
+                "email" && (
+                  <div className="settings-change-view">
+                    <header>
+                      <button
+                        type="button"
+                        className="settings-back"
+                        onClick={() =>
+                          setSettingsView(
+                            "main",
+                          )
+                        }
+                      >
+                        ← Back
+                      </button>
+
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          setSettingsOpen(
+                            false,
+                          );
+
+                          setSettingsView(
+                            "main",
+                          );
+                        }}
+                        aria-label="Close settings"
+                      >
+                        ✕
+                      </button>
+                    </header>
+
+                    <div className="settings-change-content">
+                      <h2>
+                        <TypewriterHeading text="Enter your new email" />
+                      </h2>
+
+                      <p>
+                        Enter the email address you want to use with your LearnMate account.
+                      </p>
+
+                      <input
+                        autoFocus
+                        type="email"
+                        value={
+                          emailDraft
+                        }
+                        onChange={(e) => {
+                          setEmailDraft(
+                            e.target.value,
+                          );
+
+                          setSettingsError(
+                            "",
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key ===
+                            "Enter" &&
+                            !settingsSaving
+                          ) {
+                            changeEmail();
+                          }
+                        }}
+                        placeholder="Enter your new email"
+                        maxLength={120}
+                      />
+
+                      <p className="email-change-note">
+                        You may need to confirm the new email from your inbox.
+                      </p>
+
+                      <button
+                        type="button"
+                        className="btn-brown name-save"
+                        onClick={
+                          changeEmail
+                        }
+                        disabled={
+                          settingsSaving
+                        }
+                      >
+                        {settingsSaving
+                          ? "Updating..."
+                          : "Change email"}
+
+                        {!settingsSaving && (
+                          <span>
+                            →
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
         )}
-      {/* ============================================================
-            PHOTO CROP MODAL
-        ============================================================ */}
-      {cropOpen && selectedPhotoSource && (
-        <div
-          className="crop-back"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              cancelCrop();
-            }
-          }}
-        >
-          <div
-            className="crop-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Crop profile photo"
-          >
-            <header className="crop-header">
-              <div>
-                <b>Adjust profile photo</b>
-                <small>Crop and resize before saving</small>
-              </div>
 
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={cancelCrop}
-                aria-label="Cancel photo editing"
-              >
-                ✕
-              </button>
-            </header>
+        {/* PHOTO CROP */}
 
-            <div className="crop-preview">
+        {cropOpen &&
+          selectedPhotoSource && (
+            <div
+              className="crop-back"
+              onClick={(e) => {
+                if (
+                  e.target ===
+                  e.currentTarget
+                ) {
+                  cancelCrop();
+                }
+              }}
+            >
               <div
-                className="crop-window"
-                style={{
-                  backgroundImage: `url("${selectedPhotoSource}")`,
-                  backgroundPosition:
-                    `calc(50% + ${cropX}%) calc(50% + ${cropY}%)`,
-                  backgroundSize: `${cropZoom * 100}%`,
+                className="crop-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Crop profile photo"
+              >
+                <header className="crop-header">
+                  <div>
+                    <b>
+                      Adjust profile
+                      photo
+                    </b>
+
+                    <small>
+                      Crop and resize
+                      before saving
+                    </small>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={
+                      cancelCrop
+                    }
+                    aria-label="Cancel photo editing"
+                  >
+                    ✕
+                  </button>
+                </header>
+
+                <div className="crop-preview">
+                  <div
+                    className="crop-window"
+                    style={{
+                      backgroundImage:
+                        `url("${selectedPhotoSource}")`,
+                      backgroundPosition:
+                        `calc(50% + ${cropX}%) calc(50% + ${cropY}%)`,
+                      backgroundSize:
+                        `${cropZoom * 100}%`,
+                    }}
+                  />
+
+                  <span className="crop-circle">
+                    Profile
+                  </span>
+                </div>
+
+                <div className="crop-controls">
+                  <label>
+                    <span>
+                      Zoom
+                    </span>
+
+                    <input
+                      type="range"
+                      min="1"
+                      max="3"
+                      step="0.01"
+                      value={
+                        cropZoom
+                      }
+                      onChange={(e) =>
+                        setCropZoom(
+                          Number(
+                            e.target
+                              .value,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    <span>
+                      Horizontal
+                    </span>
+
+                    <input
+                      type="range"
+                      min="-25"
+                      max="25"
+                      step="1"
+                      value={cropX}
+                      onChange={(e) =>
+                        setCropX(
+                          Number(
+                            e.target
+                              .value,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    <span>
+                      Vertical
+                    </span>
+
+                    <input
+                      type="range"
+                      min="-25"
+                      max="25"
+                      step="1"
+                      value={cropY}
+                      onChange={(e) =>
+                        setCropY(
+                          Number(
+                            e.target
+                              .value,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+
+                <img
+                  ref={
+                    photoImageRef
+                  }
+                  src={
+                    selectedPhotoSource
+                  }
+                  alt=""
+                  className="crop-hidden-image"
+                />
+
+                <div className="crop-actions">
+                  <button
+                    type="button"
+                    className="crop-cancel"
+                    onClick={
+                      cancelCrop
+                    }
+                    disabled={
+                      photoSaving
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    className="crop-save"
+                    onClick={
+                      finalizePhoto
+                    }
+                    disabled={
+                      photoSaving
+                    }
+                  >
+                    {photoSaving
+                      ? "Saving..."
+                      : "Use this photo"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        {/* FIRST LOGIN */}
+
+        {needsNameSetup && (
+          <div className="name-setup-back">
+            <div
+              className="name-setup reveal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Set your LearnMate name"
+            >
+              <h2>
+                <TypewriterHeading text="Set your LearnMate name" />
+              </h2>
+
+              <p>
+                Choose the name you want LearnMate to use when welcoming you.
+              </p>
+
+              <input
+                autoFocus
+                value={
+                  nameDraft
+                }
+                onChange={(e) => {
+                  setNameDraft(
+                    e.target.value,
+                  );
+
+                  if (nameError) {
+                    setNameError("");
+                  }
                 }}
+                onKeyDown={(e) => {
+                  if (
+                    e.key ===
+                    "Enter" &&
+                    !nameSaving
+                  ) {
+                    saveLearnMateName();
+                  }
+                }}
+                placeholder="Enter your name"
+                maxLength={40}
               />
 
-              <span className="crop-circle">Profile</span>
-            </div>
-
-            <div className="crop-controls">
-              <label>
-                <span>Zoom</span>
-                <input
-                  type="range"
-                  min="1"
-                  max="3"
-                  step="0.01"
-                  value={cropZoom}
-                  onChange={(e) =>
-                    setCropZoom(Number(e.target.value))
-                  }
-                />
-              </label>
-
-              <label>
-                <span>Horizontal</span>
-                <input
-                  type="range"
-                  min="-25"
-                  max="25"
-                  step="1"
-                  value={cropX}
-                  onChange={(e) =>
-                    setCropX(Number(e.target.value))
-                  }
-                />
-              </label>
-
-              <label>
-                <span>Vertical</span>
-                <input
-                  type="range"
-                  min="-25"
-                  max="25"
-                  step="1"
-                  value={cropY}
-                  onChange={(e) =>
-                    setCropY(Number(e.target.value))
-                  }
-                />
-              </label>
-            </div>
-
-            <img
-              ref={photoImageRef}
-              src={selectedPhotoSource}
-              alt=""
-              className="crop-hidden-image"
-            />
-
-            <div className="crop-actions">
-              <button
-                type="button"
-                className="crop-cancel"
-                onClick={cancelCrop}
-                disabled={photoSaving}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="crop-save"
-                onClick={finalizePhoto}
-                disabled={photoSaving}
-              >
-                {photoSaving ? "Saving..." : "Use this photo"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================
-            FIRST LOGIN NAME SETUP
-        ============================================================ */}
-      {needsNameSetup && (
-        <div className="name-setup-back">
-          <div
-            className="name-setup reveal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Set your LearnMate name"
-          >
-            <h2>
-              <TypewriterHeading text="Set your LearnMate name" />
-            </h2>
-
-            <p>
-              Choose the name you want LearnMate to use when welcoming you.
-            </p>
-
-            <input
-              autoFocus
-              value={nameDraft}
-              onChange={(e) => {
-                setNameDraft(e.target.value);
-
-                if (nameError) {
-                  setNameError("");
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !nameSaving) {
-                  saveLearnMateName();
-                }
-              }}
-              placeholder="Enter your name"
-              maxLength={40}
-            />
-
-            {nameError && (
-              <p className="name-error">
-                {nameError}
-              </p>
-            )}
-
-            <button
-              type="button"
-              className="btn-brown name-save"
-              onClick={saveLearnMateName}
-              disabled={nameSaving}
-            >
-              {nameSaving ? "Saving..." : "Continue"}
-
-              {!nameSaving && (
-                <span aria-hidden="true">→</span>
+              {nameError && (
+                <p className="name-error">
+                  {nameError}
+                </p>
               )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================
-            CONFIRMATION MODAL
-        ============================================================ */}
-      {confirmAction && (
-        <div
-          className="confirm-back"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              if (!accountActionLoading) {
-                setConfirmAction(null);
-              }
-            }
-          }}
-        >
-          <div
-            className={
-              confirmAction === "delete"
-                ? "confirm-modal danger-confirm"
-                : "confirm-modal"
-            }
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="confirm-title"
-          >
-            <div className="confirm-icon">
-              {confirmAction === "delete" ? "!" : "?"}
-            </div>
-
-            <h2 id="confirm-title">
-              {confirmAction === "delete"
-                ? "Delete your account?"
-                : "Log out of LearnMate?"}
-            </h2>
-
-            <p>
-              {confirmAction === "delete"
-                ? "This will permanently delete your LearnMate account. You will not be able to sign in to this deleted account again."
-                : "Are you sure you want to log out of your LearnMate account?"}
-            </p>
-
-            {confirmAction === "delete" && (
-              <p className="confirm-warning">
-                This action cannot be undone.
-              </p>
-            )}
-
-            <div className="confirm-actions">
-              <button
-                type="button"
-                className="confirm-cancel"
-                onClick={() => setConfirmAction(null)}
-                disabled={accountActionLoading}
-              >
-                Cancel
-              </button>
 
               <button
                 type="button"
-                className={
-                  confirmAction === "delete"
-                    ? "confirm-danger"
-                    : "confirm-primary"
-                }
+                className="btn-brown name-save"
                 onClick={
-                  confirmAction === "delete"
-                    ? handleDeleteAccount
-                    : handleLogout
+                  saveLearnMateName
                 }
-                disabled={accountActionLoading}
+                disabled={
+                  nameSaving
+                }
               >
-                {accountActionLoading
-                  ? confirmAction === "delete"
-                    ? "Deleting..."
-                    : "Logging out..."
-                  : confirmAction === "delete"
-                    ? "Delete account"
-                    : "Log out"}
+                {nameSaving
+                  ? "Saving..."
+                  : "Continue"}
+
+                {!nameSaving && (
+                  <span>
+                    →
+                  </span>
+                )}
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ============================================================
-            TOAST
-        ============================================================ */}
-      {toast && (
-        <div
-          className={`lm-toast ${toast.type === "success"
-              ? "success"
-              : "error"
-            }`}
-          role="alert"
-        >
-          <span className="toast-icon">
-            {toast.type === "success" ? "✓" : "!"}
-          </span>
+        {/* CONFIRMATION */}
 
-          <span>{toast.message}</span>
-        </div>
-      )}
-    </div >
+        {confirmAction && (
+          <div
+            className="confirm-back"
+            onClick={(e) => {
+              if (
+                e.target ===
+                e.currentTarget &&
+                !accountActionLoading
+              ) {
+                setConfirmAction(
+                  null,
+                );
+              }
+            }}
+          >
+            <div
+              className={
+                confirmAction ===
+                  "delete"
+                  ? "confirm-modal danger-confirm"
+                  : "confirm-modal"
+              }
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="confirm-title"
+            >
+              <div className="confirm-icon">
+                {confirmAction ===
+                  "delete"
+                  ? "!"
+                  : "?"}
+              </div>
+
+              <h2 id="confirm-title">
+                {confirmAction ===
+                  "delete"
+                  ? "Delete your account?"
+                  : "Log out of LearnMate?"}
+              </h2>
+
+              <p>
+                {confirmAction ===
+                  "delete"
+                  ? "This will permanently delete your LearnMate account. You will not be able to sign in to this deleted account again."
+                  : "Are you sure you want to log out of your LearnMate account?"}
+              </p>
+
+              {confirmAction ===
+                "delete" && (
+                  <p className="confirm-warning">
+                    This action
+                    cannot be
+                    undone.
+                  </p>
+                )}
+
+              <div className="confirm-actions">
+                <button
+                  type="button"
+                  className="confirm-cancel"
+                  onClick={() =>
+                    setConfirmAction(
+                      null,
+                    )
+                  }
+                  disabled={
+                    accountActionLoading
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className={
+                    confirmAction ===
+                      "delete"
+                      ? "confirm-danger"
+                      : "confirm-primary"
+                  }
+                  onClick={
+                    confirmAction ===
+                      "delete"
+                      ? handleDeleteAccount
+                      : handleLogout
+                  }
+                  disabled={
+                    accountActionLoading
+                  }
+                >
+                  {accountActionLoading
+                    ? confirmAction ===
+                      "delete"
+                      ? "Deleting..."
+                      : "Logging out..."
+                    : confirmAction ===
+                      "delete"
+                      ? "Delete account"
+                      : "Log out"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TOAST */}
+
+        {toast && (
+          <div
+            className={`lm-toast ${toast.type ===
+                "success"
+                ? "success"
+                : "error"
+              }`}
+            role="alert"
+          >
+            <span className="toast-icon">
+              {toast.type ===
+                "success"
+                ? "✓"
+                : "!"}
+            </span>
+
+            <span>
+              {toast.message}
+            </span>
+          </div>
+        )}
+      </div>
     </>
   );
 }
-
-/* ============================================================
-   TYPEWRITER HEADING
-============================================================ */
 
 function TypewriterHeading({
   text,
 }: {
   text: string;
 }) {
-  const [displayed, setDisplayed] = useState("");
+  const [displayed, setDisplayed] =
+    useState("");
 
   useEffect(() => {
     let index = 0;
 
     setDisplayed("");
 
-    const timer = window.setInterval(() => {
-      index += 1;
+    const timer =
+      window.setInterval(() => {
+        index += 1;
 
-      setDisplayed(text.slice(0, index));
+        setDisplayed(
+          text.slice(
+            0,
+            index,
+          ),
+        );
 
-      if (index >= text.length) {
-        window.clearInterval(timer);
-      }
-    }, 55);
+        if (
+          index >=
+          text.length
+        ) {
+          window.clearInterval(
+            timer,
+          );
+        }
+      }, 55);
 
-    return () => window.clearInterval(timer);
+    return () =>
+      window.clearInterval(
+        timer,
+      );
   }, [text]);
 
   return (
     <>
       {displayed}
-      <span className="type-cursor">|</span>
+
+      <span className="type-cursor">
+        |
+      </span>
     </>
   );
 }
-
-/* ============================================================
-   CSS
-============================================================ */
 
 const CSS = `
 :root{
@@ -3294,10 +3785,6 @@ body{
   min-height:100vh
 }
 
-/* ============================================================
-   SIDEBAR
-============================================================ */
-
 .lm .sidebar{
   width:236px;
   flex-shrink:0;
@@ -3344,23 +3831,25 @@ body{
   flex-shrink:0
 }
 
-.lm .nav a{
+.lm .nav-link{
   display:flex;
   align-items:center;
   gap:12px;
-  text-decoration:none;
   color:var(--sidebar-text);
   padding:11px 12px;
   border-radius:12px;
   font-size:14px;
-  font-weight:500
+  font-weight:500;
+  width:100%;
+  text-align:left;
+  min-height:36px
 }
 
-.lm .nav a:hover{
+.lm .nav-link:hover{
   background:rgba(233,198,137,.14)
 }
 
-.lm .nav a.active{
+.lm .nav-link.active{
   background:rgba(233,198,137,.18);
   box-shadow:inset 0 0 0 1px rgba(233,198,137,.18);
   font-weight:600
@@ -3432,10 +3921,6 @@ body{
   font-size:12px
 }
 
-/* ============================================================
-   MAIN
-============================================================ */
-
 .lm .main{
   flex:1;
   margin-left:236px;
@@ -3470,9 +3955,7 @@ body{
 }
 
 @keyframes cursorBlink{
-  50%{
-    opacity:0
-  }
+  50%{opacity:0}
 }
 
 .lm .sub{
@@ -3547,10 +4030,6 @@ body{
   object-fit:cover
 }
 
-/* ============================================================
-   DESKTOP THEME SWITCH
-============================================================ */
-
 .lm .desktop-theme-toggle{
   display:flex;
   align-items:center
@@ -3591,10 +4070,7 @@ body{
   place-items:center;
   font-size:13px;
   flex-shrink:0;
-  box-shadow:0 2px 7px rgba(0,0,0,.18);
-  transition:
-    transform .35s cubic-bezier(.22,1,.36,1),
-    background-color .25s ease
+  box-shadow:0 2px 7px rgba(0,0,0,.18)
 }
 
 .lm .theme-switch[aria-checked="true"]{
@@ -3621,10 +4097,6 @@ body{
 .lm .theme-switch[aria-checked="true"] .theme-label{
   color:#F6E8D0
 }
-
-/* ============================================================
-   NOTIFICATIONS
-============================================================ */
 
 .lm .pop{
   position:fixed;
@@ -3665,10 +4137,6 @@ body{
   padding:10px
 }
 
-/* ============================================================
-   STATISTICS
-============================================================ */
-
 .lm .stats{
   display:grid;
   grid-template-columns:repeat(4,1fr);
@@ -3698,8 +4166,7 @@ body{
 
 .lm .ring svg{
   width:100%;
-  height:100%;
-  transform:none
+  height:100%
 }
 
 .lm .ring-track{
@@ -3772,10 +4239,6 @@ body{
   font-weight:500;
   font-size:13px
 }
-
-/* ============================================================
-   MAIN GRID / HERO
-============================================================ */
 
 .lm .grid{
   display:grid;
@@ -3869,8 +4332,7 @@ body{
   height:100%;
   width:0;
   background:#F5E7CC;
-  border-radius:999px;
-  transition:width 1.2s cubic-bezier(.22,1,.36,1)
+  border-radius:999px
 }
 
 .lm .hero-meta{
@@ -3884,10 +4346,6 @@ body{
 .lm .hero-meta .pct{
   margin-left:auto
 }
-
-/* ============================================================
-   BUTTONS
-============================================================ */
 
 .lm .btn-cream{
   background:#FBF2DF;
@@ -3929,10 +4387,6 @@ body{
 .lm .btn-brown.centered{
   justify-content:center
 }
-
-/* ============================================================
-   PERFORMANCE / SECTIONS
-============================================================ */
 
 .lm .sec-head{
   display:flex;
@@ -4001,8 +4455,482 @@ body{
 }
 
 /* ============================================================
-   SETTINGS
+   MARK 2 — COURSES
 ============================================================ */
+
+.lm .courses-page{
+  width:100%;
+  min-width:0;
+  padding-top:0
+}
+
+.lm .courses-heading-wrap{
+  min-width:0
+}
+
+.lm .courses-content{
+  opacity:0;
+  transform:translateY(8px);
+  pointer-events:none
+}
+
+.lm .courses-content-visible{
+  animation:coursesContentIn .6s ease forwards;
+  pointer-events:auto
+}
+
+@keyframes coursesContentIn{
+  from{
+    opacity:0;
+    transform:translateY(10px)
+  }
+  to{
+    opacity:1;
+    transform:none
+  }
+}
+
+.lm .courses-section{
+  margin-top:22px
+}
+
+.lm .courses-section-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:4px
+}
+
+.lm .courses-section-head h2{
+  font-size:18px;
+  font-weight:800;
+  letter-spacing:-.02em
+}
+
+.lm .courses-section-head span{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700
+}
+
+.lm .add-course-top{
+  min-height:42px;
+  padding:10px 16px;
+  border-radius:12px;
+  white-space:nowrap;
+  flex-shrink:0
+}
+
+.lm .add-course-top:hover{
+  background:#8A3A05
+}
+
+.lm .course-tabs{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  margin-top:20px;
+  padding:4px;
+  width:max-content;
+  max-width:100%;
+  background:var(--card-2);
+  border:1px solid var(--border);
+  border-radius:13px
+}
+
+.lm .course-tab{
+  min-height:38px;
+  padding:8px 14px;
+  border-radius:9px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:13px;
+  font-weight:700;
+  color:var(--muted)
+}
+
+.lm .course-tab span{
+  min-width:20px;
+  height:20px;
+  padding:0 6px;
+  border-radius:999px;
+  background:var(--track);
+  display:grid;
+  place-items:center;
+  font-size:10px
+}
+
+.lm .course-tab.active{
+  background:var(--brown);
+  color:#FFF6E3
+}
+
+.lm .course-tab.active span{
+  background:rgba(255,255,255,.15);
+  color:#fff
+}
+
+.lm .courses-empty{
+  min-height:110px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--muted);
+  font-size:14px;
+  text-align:center
+}
+
+.lm .courses-list{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  margin-top:14px
+}
+
+.lm .course-card{
+  padding:18px;
+  min-width:0;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow)
+}
+
+.lm .course-card-top{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  min-width:0
+}
+
+.lm .course-subject-icon{
+  width:48px;
+  height:48px;
+  border-radius:14px;
+  background:var(--icon-bg);
+  display:grid;
+  place-items:center;
+  flex-shrink:0;
+  font-size:21px
+}
+
+.lm .course-card-title{
+  flex:1;
+  min-width:0
+}
+
+.lm .course-card-title h3{
+  font-size:16px;
+  line-height:1.3;
+  overflow-wrap:anywhere
+}
+
+.lm .course-card-title p{
+  color:var(--muted);
+  font-size:12px;
+  margin-top:4px
+}
+
+.lm .course-status{
+  flex-shrink:0;
+  padding:6px 9px;
+  border-radius:999px;
+  background:var(--cream-soft);
+  color:var(--brown);
+  font-size:10px;
+  font-weight:800
+}
+
+[data-theme="dark"] .lm .course-status{
+  background:#35220F;
+  color:var(--cream)
+}
+
+.lm .course-progress{
+  margin-top:20px
+}
+
+.lm .course-progress-row{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  font-size:11px;
+  color:var(--muted)
+}
+
+.lm .course-progress-row b{
+  color:var(--text);
+  font-size:12px
+}
+
+.lm .course-progress-track{
+  height:8px;
+  background:var(--track);
+  border-radius:999px;
+  overflow:hidden;
+  margin-top:7px
+}
+
+.lm .course-progress-track i{
+  display:block;
+  height:100%;
+  background:var(--brown);
+  border-radius:inherit;
+  transition:width .8s ease
+}
+
+.lm .course-card-bottom{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-top:17px;
+  padding-top:13px;
+  border-top:1px solid var(--border-soft);
+  color:var(--muted);
+  font-size:11px
+}
+
+.lm .course-open-btn{
+  color:var(--brown);
+  font-size:12px;
+  font-weight:800;
+  min-height:30px
+}
+
+.lm .course-open-btn:hover{
+  text-decoration:underline
+}
+
+/* ADD COURSE */
+
+.lm .add-course-page{
+  animation:addCourseIn .45s cubic-bezier(.22,1,.36,1) forwards
+}
+
+.lm .add-course-closing{
+  animation:addCourseOut .32s ease forwards
+}
+
+@keyframes addCourseIn{
+  from{
+    opacity:0;
+    transform:translateY(8px)
+  }
+  to{
+    opacity:1;
+    transform:none
+  }
+}
+
+@keyframes addCourseOut{
+  from{
+    opacity:1;
+    transform:none
+  }
+  to{
+    opacity:0;
+    transform:translateY(8px)
+  }
+}
+
+.lm .add-course-heading{
+  min-height:44px
+}
+
+.lm .add-course-controls{
+  opacity:0;
+  transform:translateY(10px);
+  pointer-events:none;
+  margin-top:22px
+}
+
+.lm .add-course-controls-visible{
+  animation:addControlsIn .55s cubic-bezier(.22,1,.36,1) forwards;
+  pointer-events:auto
+}
+
+@keyframes addControlsIn{
+  from{
+    opacity:0;
+    transform:translateY(12px)
+  }
+  to{
+    opacity:1;
+    transform:none
+  }
+}
+
+.lm .course-selector-section{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:18px;
+  margin-bottom:14px
+}
+
+.lm .course-selector-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:14px
+}
+
+.lm .course-selector-title h3{
+  font-size:15px
+}
+
+.lm .course-selector-title span{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  text-align:right
+}
+
+.lm .class-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:9px
+}
+
+.lm .class-option{
+  min-height:48px;
+  padding:9px 10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--card-2);
+  font-size:12px;
+  font-weight:700;
+  color:var(--text-2);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px
+}
+
+.lm .class-option:hover{
+  border-color:var(--cream);
+  background:var(--cream-soft)
+}
+
+.lm .class-option.selected{
+  border-color:var(--brown);
+  background:var(--brown);
+  color:#FFF6E3;
+  box-shadow:0 5px 16px rgba(122,47,0,.15)
+}
+
+.lm .subject-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:10px
+}
+
+.lm .subject-option{
+  min-height:94px;
+  padding:12px 9px;
+  border:1px solid var(--border);
+  border-radius:13px;
+  background:var(--card-2);
+  color:var(--text-2);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  position:relative
+}
+
+.lm .subject-option > span{
+  width:34px;
+  height:34px;
+  border-radius:10px;
+  background:var(--icon-bg);
+  display:grid;
+  place-items:center;
+  color:var(--brown);
+  font-size:16px;
+  font-weight:800
+}
+
+.lm .subject-option b{
+  font-size:11px;
+  line-height:1.3;
+  text-align:center
+}
+
+.lm .subject-option i{
+  position:absolute;
+  top:7px;
+  right:8px;
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  background:var(--brown);
+  color:#fff;
+  display:grid;
+  place-items:center;
+  font-style:normal;
+  font-size:10px
+}
+
+.lm .subject-option:hover{
+  border-color:var(--cream)
+}
+
+.lm .subject-option.selected{
+  border-color:var(--brown);
+  box-shadow:0 0 0 2px rgba(122,47,0,.08)
+}
+
+.lm .subject-option.selected > span{
+  background:var(--brown);
+  color:#FFF6E3
+}
+
+.lm .add-course-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  margin-top:6px
+}
+
+.lm .add-course-cancel{
+  min-height:44px;
+  padding:10px 17px;
+  border:1px solid var(--border);
+  border-radius:13px;
+  background:var(--card);
+  color:var(--text-2);
+  font-size:13px;
+  font-weight:800
+}
+
+.lm .add-course-cancel:hover{
+  background:var(--card-2);
+  border-color:var(--cream)
+}
+
+.lm .add-course-save{
+  min-height:44px;
+  padding:10px 17px;
+  border-radius:13px;
+  background:var(--brown);
+  color:#FFF6E3;
+  font-size:13px;
+  font-weight:800
+}
+
+.lm .add-course-save:hover{
+  background:#8A3A05
+}
+
+/* SETTINGS */
 
 .lm .modal-back{
   position:fixed;
@@ -4057,22 +4985,6 @@ body{
   margin-bottom:6px
 }
 
-.lm .field input{
-  width:100%;
-  padding:12px;
-  border-radius:12px;
-  border:1px solid var(--border);
-  background:var(--card-2);
-  color:var(--text);
-  font:inherit;
-  min-height:44px;
-  outline:none
-}
-
-.lm .field input:focus{
-  border-color:var(--brown)
-}
-
 .lm .row2{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -4093,10 +5005,6 @@ body{
 .lm .muted-text{
   color:var(--muted)
 }
-
-/* ============================================================
-   SETTINGS VALUE SECTIONS
-============================================================ */
 
 .lm .settings-value-section{
   padding:2px 0;
@@ -4139,129 +5047,12 @@ body{
   font-weight:700;
   text-decoration:underline;
   text-decoration-color:rgba(122,47,0,.25);
-  text-underline-offset:3px;
-  transition:
-    color .2s ease,
-    text-decoration-color .2s ease
+  text-underline-offset:3px
 }
 
 .lm .change-setting-btn:hover{
-  color:#9A3B00;
-  text-decoration-color:#9A3B00
+  color:#9A3B00
 }
-
-/* ============================================================
-   SETTINGS CHANGE VIEWS
-============================================================ */
-
-.lm .settings-change-view{
-  min-height:420px;
-  animation:settingsViewFade .35s ease forwards
-}
-
-@keyframes settingsViewFade{
-  from{
-    opacity:0;
-    transform:translateY(8px)
-  }
-  to{
-    opacity:1;
-    transform:none
-  }
-}
-
-.lm .settings-change-view > header{
-  min-height:70px
-}
-
-.lm .settings-back{
-  font-size:13px;
-  font-weight:700;
-  color:var(--text-2);
-  min-height:38px;
-  padding:6px 4px;
-  border-radius:9px;
-  transition:
-    color .2s ease,
-    background-color .2s ease
-}
-
-.lm .settings-back:hover{
-  color:var(--brown);
-  background:var(--cream-soft)
-}
-
-.lm .settings-change-content{
-  padding:42px 30px 34px;
-  text-align:center;
-  animation:settingsContentFade .55s ease .08s both
-}
-
-@keyframes settingsContentFade{
-  from{
-    opacity:0;
-    transform:translateY(10px)
-  }
-  to{
-    opacity:1;
-    transform:none
-  }
-}
-
-.lm .settings-change-content h2{
-  font-size:25px;
-  line-height:1.25;
-  letter-spacing:-.025em;
-  margin-bottom:11px;
-  min-height:32px
-}
-
-.lm .settings-change-content > p{
-  color:var(--muted);
-  font-size:14px;
-  line-height:1.6;
-  max-width:400px;
-  margin:0 auto 22px
-}
-
-.lm .settings-change-content input{
-  width:100%;
-  min-height:50px;
-  padding:13px 15px;
-  border-radius:13px;
-  border:1px solid var(--border);
-  background:var(--card-2);
-  color:var(--text);
-  font:inherit;
-  outline:none;
-  text-align:left;
-  transition:
-    border-color .25s ease,
-    box-shadow .25s ease
-}
-
-.lm .settings-change-content input:focus{
-  border-color:var(--brown);
-  box-shadow:0 0 0 3px rgba(122,47,0,.08)
-}
-
-.lm .settings-change-content .name-save{
-  width:100%;
-  justify-content:center;
-  margin-top:12px
-}
-
-.lm .email-change-note{
-  margin:8px auto 0!important;
-  font-size:11px!important;
-  line-height:1.5!important;
-  color:var(--muted)!important;
-  max-width:390px!important
-}
-
-/* ============================================================
-   PROFILE
-============================================================ */
 
 .lm .settings-profile{
   display:flex;
@@ -4302,10 +5093,6 @@ body{
   margin-top:3px
 }
 
-/* ============================================================
-   PROFILE PHOTO UPLOAD
-============================================================ */
-
 .lm .photo-file-input{
   display:none
 }
@@ -4327,11 +5114,7 @@ body{
   overflow:hidden;
   box-shadow:
     0 0 0 1px rgba(233,198,137,.08),
-    0 0 18px rgba(233,198,137,.08);
-  transition:
-    border-color .25s ease,
-    background-color .25s ease,
-    box-shadow .3s ease
+    0 0 18px rgba(233,198,137,.08)
 }
 
 .lm .upload-photo-btn::before{
@@ -4349,14 +5132,11 @@ body{
   );
   transform:rotate(18deg);
   opacity:0;
-  transition:
-    left .55s ease,
-    opacity .35s ease;
+  transition:left .55s ease,opacity .35s ease;
   pointer-events:none
 }
 
 .lm .upload-photo-btn:hover{
-  background:var(--card-2);
   border-color:var(--cream);
   box-shadow:
     0 0 0 1px rgba(233,198,137,.15),
@@ -4375,7 +5155,8 @@ body{
   margin-top:6px
 }
 
-.lm .photo-error{
+.lm .photo-error,
+.lm .settings-error{
   color:#B42318;
   font-size:12px;
   margin-top:7px
@@ -4389,10 +5170,6 @@ body{
   width:74px;
   flex-shrink:0
 }
-
-/* ============================================================
-   DANGER ZONE
-============================================================ */
 
 .lm .danger-zone{
   border:1px solid rgba(217,45,32,.28);
@@ -4446,14 +5223,104 @@ body{
   white-space:nowrap
 }
 
-.lm .delete-account-btn:hover{
-  background:rgba(217,45,32,.13)!important;
-  border-color:rgba(180,35,24,.5)!important
+.lm .settings-change-view{
+  min-height:420px;
+  animation:settingsViewFade .35s ease forwards
 }
 
-/* ============================================================
-   PHOTO CROP
-============================================================ */
+@keyframes settingsViewFade{
+  from{
+    opacity:0;
+    transform:translateY(8px)
+  }
+  to{
+    opacity:1;
+    transform:none
+  }
+}
+
+.lm .settings-change-view > header{
+  min-height:70px
+}
+
+.lm .settings-back{
+  font-size:13px;
+  font-weight:700;
+  color:var(--text-2);
+  min-height:38px;
+  padding:6px 4px;
+  border-radius:9px
+}
+
+.lm .settings-back:hover{
+  color:var(--brown);
+  background:var(--cream-soft)
+}
+
+.lm .settings-change-content{
+  padding:42px 30px 34px;
+  text-align:center;
+  animation:settingsContentFade .55s ease .08s both
+}
+
+@keyframes settingsContentFade{
+  from{
+    opacity:0;
+    transform:translateY(10px)
+  }
+  to{
+    opacity:1;
+    transform:none
+  }
+}
+
+.lm .settings-change-content h2{
+  font-size:25px;
+  line-height:1.25;
+  letter-spacing:-.025em;
+  margin-bottom:11px;
+  min-height:32px
+}
+
+.lm .settings-change-content > p{
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.6;
+  max-width:400px;
+  margin:0 auto 22px
+}
+
+.lm .settings-change-content input{
+  width:100%;
+  min-height:50px;
+  padding:13px 15px;
+  border-radius:13px;
+  border:1px solid var(--border);
+  background:var(--card-2);
+  color:var(--text);
+  font:inherit;
+  outline:none;
+  text-align:left
+}
+
+.lm .settings-change-content input:focus{
+  border-color:var(--brown);
+  box-shadow:0 0 0 3px rgba(122,47,0,.08)
+}
+
+.lm .settings-change-content .name-save{
+  width:100%;
+  justify-content:center;
+  margin-top:12px
+}
+
+.lm .email-change-note{
+  margin:8px auto 0!important;
+  font-size:11px!important;
+  line-height:1.5!important;
+  color:var(--muted)!important;
+  max-width:390px!important
+}
 
 .lm .crop-back{
   position:fixed;
@@ -4471,7 +5338,6 @@ body{
   width:min(520px,100%);
   max-height:calc(100dvh - 32px);
   overflow:auto;
-  overscroll-behavior:contain;
   background:var(--card);
   border:1px solid var(--border);
   border-radius:22px;
@@ -4524,8 +5390,6 @@ body{
 .lm .crop-circle{
   position:absolute;
   inset:0;
-  display:grid;
-  place-items:center;
   color:transparent;
   border-radius:50%;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)
@@ -4580,10 +5444,6 @@ body{
   background:var(--brown);
   color:#FFF6E3
 }
-
-/* ============================================================
-   FIRST LOGIN
-============================================================ */
 
 .lm .name-setup-back{
   position:fixed;
@@ -4649,10 +5509,6 @@ body{
   justify-content:center;
   margin-top:10px
 }
-
-/* ============================================================
-   CONFIRMATION MODAL
-============================================================ */
 
 .lm .confirm-back{
   position:fixed;
@@ -4753,22 +5609,10 @@ body{
   color:#FFF6E3!important
 }
 
-.lm .confirm-primary:hover{
-  background:#8A3A05!important
-}
-
 .lm .confirm-danger{
   background:#B42318!important;
   color:#fff!important
 }
-
-.lm .confirm-danger:hover{
-  background:#9B1C12!important
-}
-
-/* ============================================================
-   TOAST
-============================================================ */
 
 .lm-toast{
   position:fixed;
@@ -4832,10 +5676,6 @@ body{
   color:var(--brown)
 }
 
-/* ============================================================
-   ANIMATIONS
-============================================================ */
-
 .lm .reveal{
   opacity:0;
   transform:translateY(8px);
@@ -4850,33 +5690,15 @@ body{
 }
 
 @keyframes fadeIn{
-  from{
-    opacity:0
-  }
-  to{
-    opacity:1
-  }
+  from{opacity:0}
+  to{opacity:1}
 }
 
-.lm .d1{
-  animation-delay:.05s
-}
-
-.lm .d2{
-  animation-delay:.12s
-}
-
-.lm .d3{
-  animation-delay:.19s
-}
-
-.lm .d4{
-  animation-delay:.26s
-}
-
-.lm .d5{
-  animation-delay:.33s
-}
+.lm .d1{animation-delay:.05s}
+.lm .d2{animation-delay:.12s}
+.lm .d3{animation-delay:.19s}
+.lm .d4{animation-delay:.26s}
+.lm .d5{animation-delay:.33s}
 
 .lm *{
   transition:
@@ -4892,7 +5714,7 @@ body{
   display:none
 }
 
-@media (prefers-reduced-motion:reduce){
+@media(prefers-reduced-motion:reduce){
   .lm *,
   .lm *:before,
   .lm *:after{
@@ -4900,19 +5722,13 @@ body{
     transition:none!important
   }
 
-  .lm .reveal{
+  .lm .reveal,
+  .lm .courses-content,
+  .lm .add-course-controls{
     opacity:1;
     transform:none
   }
-
-  .lm .bar i{
-    transition:none
-  }
 }
-
-/* ============================================================
-   TABLET
-============================================================ */
 
 @media(max-width:1100px){
   .lm .stats{
@@ -4922,14 +5738,17 @@ body{
   .lm .perf3{
     grid-template-columns:repeat(3,minmax(0,1fr))
   }
+
+  .lm .courses-list{
+    grid-template-columns:1fr 1fr
+  }
+
+  .lm .subject-grid{
+    grid-template-columns:repeat(3,1fr)
+  }
 }
 
-/* ============================================================
-   MOBILE
-============================================================ */
-
 @media(max-width:860px){
-
   .lm .desktop-theme-toggle{
     display:none
   }
@@ -5066,14 +5885,29 @@ body{
   .lm .delete-account-btn{
     flex-shrink:0
   }
+
+  .lm .courses-list{
+    grid-template-columns:1fr
+  }
+
+  .lm .class-grid{
+    grid-template-columns:repeat(3,1fr)
+  }
+
+  .lm .subject-grid{
+    grid-template-columns:repeat(2,1fr)
+  }
+
+  .lm .course-card-top{
+    flex-wrap:wrap
+  }
+
+  .lm .course-status{
+    margin-left:auto
+  }
 }
 
-/* ============================================================
-   SMALL PHONES
-============================================================ */
-
 @media(max-width:520px){
-
   .lm .topbar{
     gap:8px
   }
@@ -5173,14 +6007,43 @@ body{
     bottom:18px;
     min-width:calc(100vw - 28px)
   }
+
+  .lm .course-tabs{
+    width:100%
+  }
+
+  .lm .course-tab{
+    flex:1;
+    justify-content:center
+  }
+
+  .lm .class-grid{
+    grid-template-columns:repeat(2,1fr)
+  }
+
+  .lm .subject-grid{
+    grid-template-columns:1fr
+  }
+
+  .lm .subject-option{
+    min-height:64px;
+    flex-direction:row;
+    justify-content:flex-start;
+    text-align:left;
+    padding:10px 12px
+  }
+
+  .lm .subject-option b{
+    text-align:left
+  }
+
+  .lm .add-course-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr
+  }
 }
 
-/* ============================================================
-   VERY SMALL PHONES
-============================================================ */
-
 @media(max-width:380px){
-
   .lm .stats{
     grid-template-columns:1fr
   }

@@ -112,7 +112,7 @@ export default function AuthPage() {
     if (recoveryMode) {
       targetTitle =
         recoveryIdentifier &&
-          recoveryIdentifier.includes("@")
+        recoveryIdentifier.includes("@")
           ? "Enter your recovery email address"
           : "Enter your recovery email address";
     }
@@ -450,8 +450,8 @@ export default function AuthPage() {
           const suggestionText =
             suggestions.length > 0
               ? ` Try: ${suggestions
-                .slice(0, 3)
-                .join(", ")}.`
+                  .slice(0, 3)
+                  .join(", ")}.`
               : "";
 
           showToast(
@@ -477,8 +477,8 @@ export default function AuthPage() {
           const suggestionText =
             suggestions.length > 0
               ? ` Try: ${suggestions
-                .slice(0, 3)
-                .join(", ")}.`
+                  .slice(0, 3)
+                  .join(", ")}.`
               : "";
 
           showToast(
@@ -534,7 +534,7 @@ export default function AuthPage() {
             showToast(
               "Unable to create account",
               result.error ||
-              "That LearnMate name could not be registered.",
+                "That LearnMate name could not be registered.",
               "error"
             );
           }
@@ -1208,15 +1208,17 @@ export default function AuthPage() {
 
   return (
     <main
-      className={`auth-page ${darkMode ? "dark-mode" : ""
-        }`}
+      className={`auth-page ${
+        darkMode ? "dark-mode" : ""
+      }`}
     >
       {toast && (
         <div
-          className={`success-toast ${toast.type === "error"
+          className={`success-toast ${
+            toast.type === "error"
               ? "error-toast"
               : ""
-            }`}
+          }`}
         >
           <div className="success-toast-icon">
             {toast.type === "success"
@@ -1323,8 +1325,9 @@ export default function AuthPage() {
           {/* THEME SWITCH */}
 
           <label
-            className={`theme-switch ${darkMode ? "dark" : ""
-              }`}
+            className={`theme-switch ${
+              darkMode ? "dark" : ""
+            }`}
             aria-label="Toggle dark mode"
           >
             <input
@@ -1446,7 +1449,7 @@ export default function AuthPage() {
                   type="button"
                   className={
                     signupMethod ===
-                      "no-email"
+                    "no-email"
                       ? "active"
                       : ""
                   }
@@ -1469,7 +1472,7 @@ export default function AuthPage() {
                   type="button"
                   className={
                     signupMethod ===
-                      "email"
+                    "email"
                       ? "active"
                       : ""
                   }
@@ -1628,7 +1631,7 @@ export default function AuthPage() {
 
                 {mode === "signup" &&
                   signupMethod ===
-                  "no-email" && (
+                    "no-email" && (
                     <div className="field">
                       <label htmlFor="name">
                         LearnMate Name
@@ -1662,49 +1665,49 @@ export default function AuthPage() {
 
                 {(mode === "signin" ||
                   signupMethod ===
-                  "email") && (
-                    <div className="field">
-                      <label htmlFor="email">
-                        {mode === "signin"
-                          ? "Email or Name"
-                          : "Email"}
-                      </label>
+                    "email") && (
+                  <div className="field">
+                    <label htmlFor="email">
+                      {mode === "signin"
+                        ? "Email or Name"
+                        : "Email"}
+                    </label>
 
-                      <div className="input-wrap">
-                        <span className="input-icon">
-                          ✉
-                        </span>
+                    <div className="input-wrap">
+                      <span className="input-icon">
+                        ✉
+                      </span>
 
-                        <input
-                          id="email"
-                          type={
-                            mode ===
-                              "signin"
-                              ? "text"
-                              : "email"
-                          }
-                          placeholder={
-                            mode ===
-                              "signin"
-                              ? "you@example.com or your name"
-                              : "you@example.com"
-                          }
-                          value={email}
-                          onChange={(e) =>
-                            setEmail(
-                              e.target.value
-                            )
-                          }
-                          autoComplete={
-                            mode ===
-                              "signin"
-                              ? "username"
-                              : "email"
-                          }
-                        />
-                      </div>
+                      <input
+                        id="email"
+                        type={
+                          mode ===
+                          "signin"
+                            ? "text"
+                            : "email"
+                        }
+                        placeholder={
+                          mode ===
+                          "signin"
+                            ? "you@example.com or your name"
+                            : "you@example.com"
+                        }
+                        value={email}
+                        onChange={(e) =>
+                          setEmail(
+                            e.target.value
+                          )
+                        }
+                        autoComplete={
+                          mode ===
+                          "signin"
+                            ? "username"
+                            : "email"
+                        }
+                      />
                     </div>
-                  )}
+                  </div>
+                )}
 
                 {/* =================================================
                     PASSWORD
@@ -1729,7 +1732,7 @@ export default function AuthPage() {
                       }
                       placeholder={
                         mode ===
-                          "signup"
+                        "signup"
                           ? "Create a strong password"
                           : "Enter your password"
                       }
@@ -1742,7 +1745,7 @@ export default function AuthPage() {
                       }
                       autoComplete={
                         mode ===
-                          "signup"
+                        "signup"
                           ? "new-password"
                           : "current-password"
                       }
@@ -1773,7 +1776,7 @@ export default function AuthPage() {
                                 key={bar}
                                 className={
                                   bar <=
-                                    strength.level
+                                  strength.level
                                     ? "filled"
                                     : ""
                                 }
@@ -1853,13 +1856,13 @@ export default function AuthPage() {
                       <p
                         className={
                           password ===
-                            confirmPassword
+                          confirmPassword
                             ? "password-match success"
                             : "password-match error"
                         }
                       >
                         {password ===
-                          confirmPassword
+                        confirmPassword
                           ? "Passwords match"
                           : "Passwords do not match"}
                       </p>

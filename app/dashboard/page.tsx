@@ -394,6 +394,8 @@ export default function DashboardPage() {
 
   const [courses, setCourses] =
     useState<Course[]>([]);
+  const [courseTab, setCourseTab] =
+    useState<"ongoing" | "completed">("ongoing");
 
   const [selectedClass, setSelectedClass] =
     useState<string | null>(null);
@@ -2325,40 +2327,47 @@ export default function DashboardPage() {
                             : "courses-content"
                         }
                       >
-                        <div className="courses-heading-row">
-                          <div />
+                    <div className="courses-heading-row">
+                      <button
+                        type="button"
+                        className="btn-brown add-course-top"
+                        onClick={() => {
+                          openAddCourse();
+                        }}
+                      >
+                        + Add Course
+                      </button>
+                    </div>
 
-                          <button
-                            type="button"
-                            className="btn-brown add-course-top"
-                            onClick={
-                              openAddCourse
-                            }
-                          >
-                            + Add Course
-                          </button>
-                        </div>
+                    <div className="course-tabs">
+                      <button
+                        type="button"
+                        className={`course-tab ${courseTab === "ongoing" ? "active" : ""
+                          }`}
+                        onClick={() =>
+                          setCourseTab("ongoing")
+                        }
+                      >
+                        Ongoing
+                        <span>
+                          {ongoingCourses.length}
+                        </span>
+                      </button>
 
-                        <div className="course-tabs">
-                          <div className="course-tab active">
-                            Ongoing
-                            <span>
-                              {
-                                ongoingCourses.length
-                              }
-                            </span>
-                          </div>
-
-                          <div className="course-tab">
-                            Completed
-                            <span>
-                              {
-                                completedCourses.length
-                              }
-                            </span>
-                          </div>
-                        </div>
-
+                      <button
+                        type="button"
+                        className={`course-tab ${courseTab === "completed" ? "active" : ""
+                          }`}
+                        onClick={() =>
+                          setCourseTab("completed")
+                        }
+                      >
+                        Completed
+                        <span>
+                          {completedCourses.length}
+                        </span>
+                      </button>
+                    </div>
                         <section className="courses-section">
                           <div className="courses-section-head">
                             <h2>
@@ -4513,7 +4522,12 @@ body{
   font-size:12px;
   font-weight:700
 }
-
+.lm .courses-heading-row{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  width:100%
+}
 .lm .add-course-top{
   min-height:42px;
   padding:10px 16px;

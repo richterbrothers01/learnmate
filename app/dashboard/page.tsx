@@ -39,6 +39,14 @@ type Course = {
   class: string;
   subject: string;
   progress: number;
+  classLevel: number;
+  stream: string | null;
+  mathVariant: "Pure" | "Applied" | null;
+};
+
+type SubjectRow = {
+  id: string;
+  name: string;
 };
 
 const supabase = createClient();
@@ -59,13 +67,47 @@ const CLASSES = Array.from(
   (_, i) => `Class ${i + 1}`,
 );
 
-const SUBJECTS = [
-  "Information Technology",
+const STREAMS = [
+  "Science",
+  "Commerce",
+  "Arts/Humanities",
+];
+
+const JUNIOR_SUBJECTS = [
+  "English",
+  "Mathematics",
+  "EVS",
+];
+
+const MIDDLE_SUBJECTS = [
+  "English",
+  "Mathematics",
   "Science",
   "Social Science",
-  "Mathematics",
-  "English",
 ];
+
+const STREAM_SUBJECTS: Record<string, string[]> = {
+  Science: [
+    "Physics",
+    "Chemistry",
+    "Mathematics",
+    "Biology",
+    "Computer Science",
+  ],
+  Commerce: [
+    "Accountancy",
+    "Business Studies",
+    "Economics",
+    "Mathematics",
+  ],
+  "Arts/Humanities": [
+    "History",
+    "Political Science",
+    "Geography",
+    "Sociology",
+    "Psychology",
+  ],
+};
 
 function getStreakMeta(days: number): StreakMeta {
   if (days <= 3) {
@@ -403,15 +445,41 @@ export default function DashboardPage() {
   const [selectedSubject, setSelectedSubject] =
     useState<string | null>(null);
 
+  const [selectedCompulsorySubject, setSelectedCompulsorySubject] =
+    useState<string | null>(null);
+
   const [coursesContentReady, setCoursesContentReady] =
     useState(false);
 
   const [addControlsReady, setAddControlsReady] =
     useState(false);
+  const [courseLoading, setCourseLoading] =
+    useState(true);
+
+  const [courseSaving, setCourseSaving] =
+    useState(false);
+
+  const [courseDeleteLoading, setCourseDeleteLoading] =
+    useState(false);
+
+  const [selectedStream, setSelectedStream] =
+    useState<string | null>(null);
+
+  const [selectedMathVariant, setSelectedMathVariant] =
+    useState<"Pure" | "Applied" | null>(null);
+
+  const [courseDeleteMode, setCourseDeleteMode] =
+    useState(false);
+
+  const [selectedCourseIds, setSelectedCourseIds] =
+    useState<string[]>([]);
+
+  const [courseDeleteConfirmOpen, setCourseDeleteConfirmOpen] =
+    useState(false);
 
   useEffect(() => {
     const savedSection =
-      localStorage.getItem(
+      sessionStorage.getItem(
         "learnmate-active-section",
       );
 
@@ -436,6 +504,26 @@ export default function DashboardPage() {
   }, [activeSection]);
 
   useEffect(() => {
+    let mounted = true;
+
+    const initializeCourses = async () => {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+
+      if (!authUser || !mounted) return;
+
+      await loadCourses(authUser.id);
+    };
+
+    initializeCourses();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!addOpen) {
       setAddControlsReady(false);
       return;
@@ -447,14 +535,517 @@ export default function DashboardPage() {
 
     return () => window.clearTimeout(timer);
   }, [addOpen]);
+  const getClassNumber = (
+    value: string | null,
+  ): number | null => {
+    if (!value) return null;
 
+    const number = Number(
+      value.replace("Class ", "").trim(),
+    );
+
+    return Number.isFinite(number)
+      ? number
+      : null;
+  };
+
+  const getSubjectsForSelection = (
+    classLevel: number | null,
+    stream: string | null,
+  ): string[] => {
+    if (!classLevel) return [];
+
+    if (classLevel === 1 || classLevel === 2) {
+      return ["English", "Mathematics"];
+    }
+
+    if (classLevel >= 3 && classLevel <= 5) {
+      return JUNIOR_SUBJECTS;
+    }
+
+    if (classLevel >= 6 && classLevel <= 10) {
+      return MIDDLE_SUBJECTS;
+    }
+
+    if (classLevel >= 11 && classLevel <= 12) {
+      if (!stream) return [];
+
+      return STREAM_SUBJECTS[stream] || [];
+    }
+
+    return [];
+  };
+
+  const getSubjectIcon = (
+    subject: string,
+  ): string => {
+    switch (subject) {
+      case "Mathematics":
+        return "∑";
+
+      case "Science":
+      case "Physics":
+      case "Chemistry":
+      case "Biology":
+        return "⚗";
+
+      case "Computer Science":
+        return "⌘";
+
+      case "Social Science":
+      case "Geography":
+        return "🌍";
+
+      case "History":
+        return "◫";
+
+      case "Political Science":
+        return "⚖";
+
+      case "Psychology":
+        return "◉";
+
+      case "Economics":
+        return "₹";
+
+      case "Accountancy":
+        return "▤";
+
+      case "Business Studies":
+        return "▣";
+
+      default:
+        return "A";
+    }
+  };
+
+  const parseCourseTitle = (
+    title: string,
+    classLevel: number,
+  ): {
+    stream: string | null;
+    mathVariant: "Pure" | "Applied" | null;
+  } => {
+    let stream: string | null = null;
+    let mathVariant:
+      | "Pure"
+      | "Applied"
+      | null = null;
+
+    if (title.includes("— Science")) {
+      stream = "Science";
+    } else if (title.includes("— Commerce")) {
+      stream = "Commerce";
+    } else if (
+      title.includes("— Arts/Humanities")
+    ) {
+      stream = "Arts/Humanities";
+    }
+
+    if (
+      classLevel >= 11 &&
+      title.includes("Mathematics (Pure)")
+    ) {
+      mathVariant = "Pure";
+    }
+
+    if (
+      classLevel >= 11 &&
+      title.includes("Mathematics (Applied)")
+    ) {
+      mathVariant = "Applied";
+    }
+
+    return {
+      stream,
+      mathVariant,
+    };
+  };
+
+  const loadCourses = async (
+    userId: string,
+  ) => {
+    setCourseLoading(true);
+
+    try {
+      const {
+        data: courseRows,
+        error: courseError,
+      } = await supabase
+        .from("courses")
+        .select(
+          "id,title,class_level,subject_id,created_at",
+        )
+        .eq("user_id", userId)
+        .order("created_at", {
+          ascending: false,
+        });
+
+      if (courseError) {
+        console.error(
+          "Could not load courses:",
+          courseError,
+        );
+
+        showToast(
+          "Could not load your courses.",
+          "error",
+        );
+
+        return;
+      }
+
+      if (!courseRows?.length) {
+        setCourses([]);
+        return;
+      }
+
+      const subjectIds = Array.from(
+        new Set(
+          courseRows.map(
+            (course) => course.subject_id,
+          ),
+        ),
+      );
+
+      const {
+        data: subjectRows,
+        error: subjectError,
+      } = await supabase
+        .from("subjects")
+        .select("id,name")
+        .in("id", subjectIds);
+
+      if (subjectError) {
+        console.error(
+          "Could not load subjects:",
+          subjectError,
+        );
+
+        setCourses([]);
+        return;
+      }
+
+      const subjectMap = new Map<string, string>();
+
+      (
+        (subjectRows || []) as SubjectRow[]
+      ).forEach((subject) => {
+        subjectMap.set(
+          subject.id,
+          subject.name,
+        );
+      });
+
+      const rawCourses = courseRows.map(
+        (row) => {
+          const classLevel =
+            Number(row.class_level);
+
+          const subject =
+            subjectMap.get(row.subject_id) ||
+            "Unknown Subject";
+
+          const parsed =
+            parseCourseTitle(
+              row.title,
+              classLevel,
+            );
+
+          return {
+            id: row.id,
+            title: row.title,
+            class: `Class ${classLevel}`,
+            subject,
+            progress: 0,
+            classLevel,
+            stream: parsed.stream,
+            mathVariant: parsed.mathVariant,
+          };
+        },
+      );
+
+      const courseIds =
+        rawCourses.map(
+          (course) => course.id,
+        );
+
+      const {
+        data: chapters,
+        error: chaptersError,
+      } = await supabase
+        .from("chapters")
+        .select("id,course_id")
+        .in("course_id", courseIds);
+
+      if (chaptersError || !chapters?.length) {
+        setCourses(rawCourses);
+        return;
+      }
+
+      const chapterIds =
+        chapters.map(
+          (chapter) => chapter.id,
+        );
+
+      const {
+        data: milestones,
+        error: milestonesError,
+      } = await supabase
+        .from("milestones")
+        .select("id,chapter_id")
+        .in("chapter_id", chapterIds);
+
+      if (
+        milestonesError ||
+        !milestones?.length
+      ) {
+        setCourses(rawCourses);
+        return;
+      }
+
+      const milestoneIds =
+        milestones.map(
+          (milestone) => milestone.id,
+        );
+
+      const {
+        data: progressRows,
+        error: progressError,
+      } = await supabase
+        .from("milestone_progress")
+        .select(
+          "milestone_id,progress_percent,completed",
+        )
+        .eq("user_id", userId)
+        .in("milestone_id", milestoneIds);
+
+      if (progressError) {
+        setCourses(rawCourses);
+        return;
+      }
+
+      const chapterToCourse =
+        new Map<string, string>();
+
+      chapters.forEach((chapter) => {
+        chapterToCourse.set(
+          chapter.id,
+          chapter.course_id,
+        );
+      });
+
+      const milestoneToCourse =
+        new Map<string, string>();
+
+      milestones.forEach((milestone) => {
+        const courseId =
+          chapterToCourse.get(
+            milestone.chapter_id,
+          );
+
+        if (courseId) {
+          milestoneToCourse.set(
+            milestone.id,
+            courseId,
+          );
+        }
+      });
+
+      const progressByCourse =
+        new Map<string, number[]>();
+
+      milestoneIds.forEach(
+        (milestoneId) => {
+          const courseId =
+            milestoneToCourse.get(
+              milestoneId,
+            );
+
+          if (!courseId) return;
+
+          const row =
+            progressRows?.find(
+              (item) =>
+                item.milestone_id ===
+                milestoneId,
+            );
+
+          const progress = Math.max(
+            0,
+            Math.min(
+              100,
+              Number(
+                row?.progress_percent,
+              ) || 0,
+            ),
+          );
+
+          const values =
+            progressByCourse.get(
+              courseId,
+            ) || [];
+
+          values.push(progress);
+
+          progressByCourse.set(
+            courseId,
+            values,
+          );
+        },
+      );
+
+      setCourses(
+        rawCourses.map((course) => {
+          const values =
+            progressByCourse.get(
+              course.id,
+            );
+
+          const progress =
+            values?.length
+              ? Math.round(
+                values.reduce(
+                  (sum, value) =>
+                    sum + value,
+                  0,
+                ) / values.length,
+              )
+              : 0;
+
+          return {
+            ...course,
+            progress,
+          };
+        }),
+      );
+    } catch (error) {
+      console.error(
+        "Course loading error:",
+        error,
+      );
+
+      showToast(
+        "Could not load your courses.",
+        "error",
+      );
+    } finally {
+      setCourseLoading(false);
+    }
+  };
+
+  const toggleCourseSelection = (
+    courseId: string,
+  ) => {
+    setSelectedCourseIds((current) =>
+      current.includes(courseId)
+        ? current.filter(
+          (id) => id !== courseId,
+        )
+        : [...current, courseId],
+    );
+  };
+
+  const startCourseDeleteMode = () => {
+    setCourseDeleteMode(true);
+    setSelectedCourseIds([]);
+  };
+
+  const cancelCourseDeleteMode = () => {
+    setCourseDeleteMode(false);
+    setSelectedCourseIds([]);
+    setCourseDeleteConfirmOpen(false);
+  };
+
+  const requestDeleteSelectedCourses = () => {
+    if (!selectedCourseIds.length) {
+      showToast(
+        "Select at least one course.",
+        "error",
+      );
+      return;
+    }
+
+    setCourseDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteSelectedCourses =
+    async () => {
+      if (!selectedCourseIds.length) return;
+
+      setCourseDeleteLoading(true);
+
+      try {
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+
+        if (!authUser) {
+          window.location.href = "/auth";
+          return;
+        }
+
+        const { error } = await supabase
+          .from("courses")
+          .delete()
+          .in("id", selectedCourseIds)
+          .eq("user_id", authUser.id);
+
+        if (error) {
+          throw error;
+        }
+
+        const deletedIds =
+          new Set(selectedCourseIds);
+
+        setCourses((current) =>
+          current.filter(
+            (course) =>
+              !deletedIds.has(course.id),
+          ),
+        );
+
+        const count =
+          selectedCourseIds.length;
+
+        setSelectedCourseIds([]);
+        setCourseDeleteMode(false);
+        setCourseDeleteConfirmOpen(false);
+
+        showToast(
+          count === 1
+            ? "Course deleted."
+            : `${count} courses deleted.`,
+          "success",
+        );
+      } catch (error) {
+        console.error(
+          "Could not delete courses:",
+          error,
+        );
+
+        showToast(
+          error instanceof Error
+            ? error.message
+            : "Could not delete the selected courses.",
+          "error",
+        );
+      } finally {
+        setCourseDeleteLoading(false);
+      }
+    };
   const ongoingCourses = courses.filter(
     (course) => course.progress < 100,
   );
 
   const completedCourses = courses.filter(
-    (course) => course.progress === 100,
+    (course) => course.progress >= 100,
   );
+
+  const displayedCourses =
+    courseTab === "ongoing"
+      ? ongoingCourses
+      : completedCourses;
 
   /* ==========================================================
      LOAD PROFILE
@@ -671,7 +1262,8 @@ export default function DashboardPage() {
       settingsOpen ||
       cropOpen ||
       needsNameSetup ||
-      confirmAction !== null;
+      confirmAction !== null ||
+      courseDeleteConfirmOpen;
 
     if (!locked) {
       document.body.style.overflow = "";
@@ -703,6 +1295,7 @@ export default function DashboardPage() {
     cropOpen,
     needsNameSetup,
     confirmAction,
+    courseDeleteConfirmOpen,
   ]);
 
   /* ==========================================================
@@ -1482,7 +2075,7 @@ export default function DashboardPage() {
       setAddOpen(false);
       setAddClosing(false);
 
-      localStorage.setItem(
+      sessionStorage.setItem(
         "learnmate-active-section",
         "dashboard",
       );
@@ -1495,7 +2088,7 @@ export default function DashboardPage() {
       setAddOpen(false);
       setAddClosing(false);
 
-      localStorage.setItem(
+      sessionStorage.setItem(
         "learnmate-active-section",
         "courses",
       );
@@ -1516,8 +2109,13 @@ export default function DashboardPage() {
   const openAddCourse = () => {
     setAddClosing(false);
     setAddOpen(true);
+
     setSelectedClass(null);
+    setSelectedStream(null);
     setSelectedSubject(null);
+    setSelectedCompulsorySubject(null);
+    setSelectedMathVariant(null);
+
     setAddControlsReady(false);
   };
 
@@ -1530,12 +2128,16 @@ export default function DashboardPage() {
     window.setTimeout(() => {
       setAddOpen(false);
       setAddClosing(false);
+
       setSelectedClass(null);
+      setSelectedStream(null);
       setSelectedSubject(null);
+      setSelectedCompulsorySubject(null);
+      setSelectedMathVariant(null);
     }, 320);
   };
 
-  const addCourse = () => {
+  const addCourse = async () => {
     if (!selectedClass) {
       showToast(
         "Please select your class.",
@@ -1544,36 +2146,162 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!selectedSubject) {
+    const classLevel =
+      getClassNumber(selectedClass);
+
+    if (!classLevel) {
       showToast(
-        "Please select your subject.",
+        "Invalid class selected.",
         "error",
       );
       return;
     }
 
-    const newCourse: Course = {
-      id: `${Date.now()}-${selectedClass}-${selectedSubject}`,
-      title: `${selectedSubject} — ${selectedClass}`,
-      class: selectedClass,
-      subject: selectedSubject,
-      progress: 0,
-    };
+    if (
+      classLevel >= 11 &&
+      !selectedStream
+    ) {
+      showToast(
+        "Please select your stream.",
+        "error",
+      );
+      return;
+    }
 
-    setCourses((current) => [
-      ...current,
-      newCourse,
-    ]);
+    const selectedCourseSubject =
+      selectedCompulsorySubject || selectedSubject;
 
-    showToast(
-      "Course added successfully.",
-      "success",
-    );
+    if (!selectedCourseSubject) {
+      showToast(
+        classLevel >= 11
+          ? "Please select one compulsory subject or stream subject."
+          : "Please select your subject.",
+        "error",
+      );
+      return;
+    }
 
-    setAddOpen(false);
-    setAddClosing(false);
-    setSelectedClass(null);
-    setSelectedSubject(null);
+    if (
+      classLevel >= 11 &&
+      selectedCourseSubject === "Mathematics" &&
+      !selectedMathVariant
+    ) {
+      showToast(
+        "Please select Pure or Applied Mathematics.",
+        "error",
+      );
+      return;
+    }
+
+    setCourseSaving(true);
+
+    try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+
+      if (!authUser) {
+        window.location.href = "/auth";
+        return;
+      }
+
+      const {
+        data: subject,
+        error: subjectError,
+      } = await supabase
+        .from("subjects")
+        .select("id")
+        .eq("name", selectedCourseSubject)
+        .maybeSingle();
+
+      if (subjectError) {
+        throw subjectError;
+      }
+
+      if (!subject) {
+        throw new Error(
+          `Subject "${selectedCourseSubject}" does not exist in Supabase.`,
+        );
+      }
+
+      const subjectTitle =
+        selectedMathVariant &&
+          selectedCourseSubject === "Mathematics"
+          ? `${selectedCourseSubject} (${selectedMathVariant})`
+          : selectedCourseSubject;
+
+      const title = [
+        subjectTitle,
+        selectedClass,
+        selectedStream,
+      ]
+        .filter(Boolean)
+        .join(" — ");
+
+      const {
+        data: insertedCourse,
+        error: insertError,
+      } = await supabase
+        .from("courses")
+        .insert({
+          user_id: authUser.id,
+          title,
+          class_level: classLevel,
+          subject_id: subject.id,
+        })
+        .select(
+          "id,title,class_level,subject_id,created_at",
+        )
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      const newCourse: Course = {
+        id: insertedCourse.id,
+        title: insertedCourse.title,
+        class: `Class ${classLevel}`,
+        subject: selectedCourseSubject,
+        progress: 0,
+        classLevel,
+        stream: selectedStream,
+        mathVariant:
+          selectedMathVariant,
+      };
+
+      setCourses((current) => [
+        newCourse,
+        ...current,
+      ]);
+
+      showToast(
+        "Course added successfully.",
+        "success",
+      );
+
+      setAddOpen(false);
+      setAddClosing(false);
+      setSelectedClass(null);
+      setSelectedStream(null);
+      setSelectedSubject(null);
+      setSelectedCompulsorySubject(null);
+      setSelectedMathVariant(null);
+    } catch (error) {
+      console.error(
+        "Could not add course:",
+        error,
+      );
+
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Could not add the course.",
+        "error",
+      );
+    } finally {
+      setCourseSaving(false);
+    }
   };
 
   /* ==========================================================
@@ -1595,22 +2323,6 @@ export default function DashboardPage() {
     !needsNameSetup &&
     activeSection === "dashboard",
   );
-
-  const typedCoursesHeading =
-    useTypewriter(
-      "My Courses",
-      55,
-      activeSection === "courses" &&
-      !addOpen &&
-      !addClosing,
-    );
-
-  const typedAddHeading =
-    useTypewriter(
-      "Add a new course",
-      55,
-      addOpen || addClosing,
-    );
 
   const initial = (
     user.name || "S"
@@ -1798,45 +2510,21 @@ export default function DashboardPage() {
                 </button>
 
                 {activeSection ===
-                  "dashboard" ? (
-                  <div>
-                    <h1 className="h1">
-                      {typedWelcome}
+                  "dashboard" && (
+                    <div>
+                      <h1 className="h1">
+                        {typedWelcome}
 
-                      <span className="type-cursor">
-                        |
-                      </span>
-                    </h1>
+                        <span className="type-cursor">
+                          |
+                        </span>
+                      </h1>
 
-                    <p className="sub">
-                      {welcomeSubtext}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="courses-heading-wrap">
-                    {!addOpen &&
-                      !addClosing && (
-                        <h1 className="h1">
-                          {typedCoursesHeading}
-
-                          <span className="type-cursor">
-                            |
-                          </span>
-                        </h1>
-                      )}
-
-                    {addOpen &&
-                      !addClosing && (
-                        <h1 className="h1">
-                          {typedAddHeading}
-
-                          <span className="type-cursor">
-                            |
-                          </span>
-                        </h1>
-                      )}
-                  </div>
-                )}
+                      <p className="sub">
+                        {welcomeSubtext}
+                      </p>
+                    </div>
+                  )}
               </div>
 
               <div className="top-actions">
@@ -2201,7 +2889,7 @@ export default function DashboardPage() {
                                   "courses",
                                 );
 
-                                localStorage.setItem(
+                                sessionStorage.setItem(
                                   "learnmate-active-section",
                                   "courses",
                                 );
@@ -2312,454 +3000,525 @@ export default function DashboardPage() {
                 MY COURSES
             ================================================== */}
 
-            {activeSection ===
-              "courses" && (
-                <section
-                  className="courses-page"
-                  aria-label="My Courses"
-                >
-                  {!addOpen &&
-                    !addClosing && (
-                      <div
-                        className={
-                          coursesContentReady
-                            ? "courses-content courses-content-visible"
-                            : "courses-content"
-                        }
-                      >
+            {activeSection === "courses" && (
+              <section
+                className="courses-page"
+                aria-label="My Courses"
+              >
+                {!addOpen && !addClosing && (
+                  <div
+                    className={
+                      coursesContentReady
+                        ? "courses-content courses-content-visible"
+                        : "courses-content"
+                    }
+                  >
                     <div className="courses-heading-row">
+                      <div className="courses-heading-copy course-heading-fade">
+                        <h1 className="h1">My Courses</h1>
+                        <p className="sub">Your learning space, organized your way.</p>
+                      </div>
+
                       <button
                         type="button"
                         className="btn-brown add-course-top"
-                        onClick={() => {
-                          openAddCourse();
-                        }}
+                        onClick={openAddCourse}
                       >
                         + Add Course
                       </button>
                     </div>
 
-                    <div className="course-tabs">
+                    <div className="course-tabs" role="tablist" aria-label="Course status">
                       <button
                         type="button"
-                        className={`course-tab ${courseTab === "ongoing" ? "active" : ""
-                          }`}
-                        onClick={() =>
-                          setCourseTab("ongoing")
-                        }
+                        role="tab"
+                        aria-selected={courseTab === "ongoing"}
+                        className={`course-tab ${courseTab === "ongoing" ? "active" : ""}`}
+                        onClick={() => setCourseTab("ongoing")}
                       >
                         Ongoing
-                        <span>
-                          {ongoingCourses.length}
-                        </span>
+                        <span>{ongoingCourses.length}</span>
                       </button>
 
                       <button
                         type="button"
-                        className={`course-tab ${courseTab === "completed" ? "active" : ""
-                          }`}
-                        onClick={() =>
-                          setCourseTab("completed")
-                        }
+                        role="tab"
+                        aria-selected={courseTab === "completed"}
+                        className={`course-tab ${courseTab === "completed" ? "active" : ""}`}
+                        onClick={() => setCourseTab("completed")}
                       >
                         Completed
-                        <span>
-                          {completedCourses.length}
-                        </span>
+                        <span>{completedCourses.length}</span>
                       </button>
                     </div>
-                        <section className="courses-section">
-                          <div className="courses-section-head">
-                            <h2>
-                              Ongoing
-                            </h2>
 
-                            <span>
-                              0–99%
-                            </span>
-                          </div>
-
-                          {ongoingCourses.length ===
-                            0 ? (
-                            <div className="courses-empty">
-                              <span>
-                                Add new courses
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="courses-list">
-                              {ongoingCourses.map(
-                                (
-                                  course,
-                                ) => (
-                                  <article
-                                    key={
-                                      course.id
-                                    }
-                                    className="course-card"
-                                  >
-                                    <div className="course-card-top">
-                                      <div className="course-subject-icon">
-                                        {course.subject ===
-                                          "Mathematics"
-                                          ? "∑"
-                                          : course.subject ===
-                                            "Science"
-                                            ? "⚗"
-                                            : course.subject ===
-                                              "Information Technology"
-                                              ? "⌘"
-                                              : course.subject ===
-                                                "Social Science"
-                                                ? "🌍"
-                                                : "A"}
-                                      </div>
-
-                                      <div className="course-card-title">
-                                        <h3>
-                                          {
-                                            course.subject
-                                          }
-                                        </h3>
-
-                                        <p>
-                                          {
-                                            course.class
-                                          }
-                                        </p>
-                                      </div>
-
-                                      <span className="course-status">
-                                        Ongoing
-                                      </span>
-                                    </div>
-
-                                    <div className="course-progress">
-                                      <div className="course-progress-row">
-                                        <span>
-                                          Progress
-                                        </span>
-
-                                        <b>
-                                          {
-                                            course.progress
-                                          }
-                                          %
-                                        </b>
-                                      </div>
-
-                                      <div className="course-progress-track">
-                                        <i
-                                          style={{
-                                            width: `${course.progress}%`,
-                                          }}
-                                        />
-                                      </div>
-                                    </div>
-
-                                    <div className="course-card-bottom">
-                                      <span>
-                                        {
-                                          course.class
-                                        }
-                                      </span>
-
-                                      <button
-                                        type="button"
-                                        className="course-open-btn"
-                                        onClick={() =>
-                                          showToast(
-                                            "This Feature will be added in MARK3 Update",
-                                            "error",
-                                          )
-                                        }
-                                      >
-                                        Open →
-                                      </button>
-                                    </div>
-                                  </article>
-                                ),
-                              )}
-                            </div>
-                          )}
-                        </section>
-
-                        <section className="courses-section">
-                          <div className="courses-section-head">
-                            <h2>
-                              Completed
-                            </h2>
-
-                            <span>
-                              100%
-                            </span>
-                          </div>
-
-                          {completedCourses.length ===
-                            0 ? (
-                            <div className="courses-empty">
-                              <span>
-                                Add new courses
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="courses-list">
-                              {completedCourses.map(
-                                (
-                                  course,
-                                ) => (
-                                  <article
-                                    key={
-                                      course.id
-                                    }
-                                    className="course-card"
-                                  >
-                                    <div className="course-card-top">
-                                      <div className="course-subject-icon">
-                                        ✓
-                                      </div>
-
-                                      <div className="course-card-title">
-                                        <h3>
-                                          {
-                                            course.subject
-                                          }
-                                        </h3>
-
-                                        <p>
-                                          {
-                                            course.class
-                                          }
-                                        </p>
-                                      </div>
-
-                                      <span className="course-status">
-                                        Completed
-                                      </span>
-                                    </div>
-
-                                    <div className="course-progress">
-                                      <div className="course-progress-row">
-                                        <span>
-                                          Progress
-                                        </span>
-
-                                        <b>
-                                          100%
-                                        </b>
-                                      </div>
-
-                                      <div className="course-progress-track">
-                                        <i
-                                          style={{
-                                            width:
-                                              "100%",
-                                          }}
-                                        />
-                                      </div>
-                                    </div>
-
-                                    <div className="course-card-bottom">
-                                      <span>
-                                        {
-                                          course.class
-                                        }
-                                      </span>
-
-                                      <button
-                                        type="button"
-                                        className="course-open-btn"
-                                        onClick={() =>
-                                          showToast(
-                                            "This Feature will be added in MARK3 Update",
-                                            "error",
-                                          )
-                                        }
-                                      >
-                                        Open →
-                                      </button>
-                                    </div>
-                                  </article>
-                                ),
-                              )}
-                            </div>
-                          )}
-                        </section>
+                    <section
+                      key={courseTab}
+                      className="courses-section course-tab-content"
+                    >
+                      <div className="courses-section-head">
+                        <div>
+                          <h2>{courseTab === "ongoing" ? "Ongoing" : "Completed"}</h2>
+                          <p>
+                            {courseTab === "ongoing"
+                              ? "Courses you are currently learning"
+                              : "Courses you have fully completed"}
+                          </p>
+                        </div>
+                        <span>{courseTab === "ongoing" ? "0–99%" : "100%"}</span>
                       </div>
-                    )}
 
-                  {addOpen && (
+                      {courseLoading ? (
+                        <div className="courses-empty courses-loading-state">
+                          <div className="course-loader-orb" aria-hidden="true" />
+                          <span>Loading your courses...</span>
+                        </div>
+                      ) : displayedCourses.length === 0 ? (
+                        <div className="courses-empty">
+                          <strong>Nothing here yet</strong>
+                          <span>
+                            {courseTab === "ongoing"
+                              ? "No ongoing courses yet."
+                              : "No completed courses yet."}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="courses-list">
+                          {displayedCourses.map((course) => {
+                            const selected = selectedCourseIds.includes(course.id);
+
+                            return (
+                              <article
+                                key={course.id}
+                                className={`course-card ${courseDeleteMode && selected ? "course-card-selected" : ""}`}
+                                onClick={() => {
+                                  if (courseDeleteMode) toggleCourseSelection(course.id);
+                                }}
+                              >
+                                <div className="course-card-top">
+                                  <div className="course-subject-icon">
+                                    {course.progress >= 100 ? "✓" : getSubjectIcon(course.subject)}
+                                  </div>
+
+                                  <div className="course-card-title">
+                                    <h3>
+                                      {course.subject}
+                                      {course.mathVariant && ` (${course.mathVariant})`}
+                                    </h3>
+                                    <p>
+                                      {course.class}
+                                      {course.stream && ` · ${course.stream}`}
+                                    </p>
+                                  </div>
+
+                                  {courseDeleteMode ? (
+                                    <span
+                                      className={`course-select-circle ${selected ? "selected" : ""}`}
+                                      aria-label={selected ? "Selected" : "Not selected"}
+                                    >
+                                      {selected ? "✓" : ""}
+                                    </span>
+                                  ) : (
+                                    <span className="course-status">
+                                      {course.progress >= 100 ? "Completed" : "Ongoing"}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="course-progress">
+                                  <div className="course-progress-row">
+                                    <span>Progress</span>
+                                    <b>{course.progress}%</b>
+                                  </div>
+                                  <div className="course-progress-track">
+                                    <i style={{ width: `${course.progress}%` }} />
+                                  </div>
+                                </div>
+
+                                <div className="course-card-bottom">
+                                  <span>
+                                    {course.stream || course.class}
+                                  </span>
+
+                                  {courseDeleteMode ? (
+                                    <button
+                                      type="button"
+                                      className={`course-open-btn ${selected ? "selected" : ""}`}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        toggleCourseSelection(course.id);
+                                      }}
+                                    >
+                                      {selected ? "Selected ✓" : "Select"}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="course-open-btn"
+                                      onClick={() =>
+                                        showToast(
+                                          "This Feature will be added in MARK3 Update",
+                                          "error",
+                                        )
+                                      }
+                                    >
+                                      Open →
+                                    </button>
+                                  )}
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+
                     <div
                       className={
-                        addClosing
-                          ? "add-course-page add-course-closing"
-                          : "add-course-page"
+                        courseDeleteMode
+                          ? "course-danger-actions delete-mode"
+                          : "course-danger-actions"
                       }
                     >
-                      <div className="add-course-heading">
-                        <h1 className="h1">
-                          {typedAddHeading}
+                      {courseDeleteMode && (
+                        <button
+                          type="button"
+                          className="course-delete-cancel"
+                          onClick={cancelCourseDeleteMode}
+                        >
+                          Cancel
+                        </button>
+                      )}
 
-                          <span className="type-cursor">
-                            |
-                          </span>
-                        </h1>
-                      </div>
-
-                      <div
-                        className={
-                          addControlsReady
-                            ? "add-course-controls add-course-controls-visible"
-                            : "add-course-controls"
+                      <button
+                        type="button"
+                        className="course-delete-fab"
+                        onClick={
+                          courseDeleteMode
+                            ? requestDeleteSelectedCourses
+                            : startCourseDeleteMode
+                        }
+                        disabled={courseDeleteLoading}
+                        aria-label={
+                          courseDeleteMode
+                            ? "Delete selected courses"
+                            : "Delete courses"
+                        }
+                        title={
+                          courseDeleteMode
+                            ? "Delete selected courses"
+                            : "Delete courses"
                         }
                       >
-                        <section className="course-selector-section">
-                          <div className="course-selector-title">
-                            <h3>
-                              Select your
-                              class
-                            </h3>
+                        <img src="/bin.png" alt="" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                            <span>
-                              {selectedClass ||
-                                "Choose one"}
-                            </span>
-                          </div>
 
-                          <div className="class-grid">
-                            {CLASSES.map(
-                              (item) => (
-                                <button
-                                  key={item}
-                                  type="button"
-                                  className={
-                                    selectedClass ===
-                                      item
-                                      ? "class-option selected"
-                                      : "class-option"
-                                  }
-                                  onClick={() =>
-                                    setSelectedClass(
-                                      item,
-                                    )
-                                  }
-                                >
-                                  {item}
 
-                                  {selectedClass ===
-                                    item && (
-                                      <span>
-                                        ✓
-                                      </span>
+                {addOpen && (
+                  <div
+                    className={
+                      addClosing
+                        ? "add-course-page add-course-closing"
+                        : "add-course-page"
+                    }
+                  >
+                    <div className="add-course-heading">
+                      <h1 className="h1">Add a new course</h1>
+                    </div>
+
+                    <div
+                      className={
+                        addControlsReady
+                          ? "add-course-controls add-course-controls-visible"
+                          : "add-course-controls"
+                      }
+                    >
+                      <section className="course-selector-section course-step-fade">
+                        <div className="course-selector-title">
+                          <h3>
+                            Select your
+                            class
+                          </h3>
+
+                          <span>
+                            {selectedClass ||
+                              "Choose one"}
+                          </span>
+                        </div>
+
+                        <div className="class-grid">
+                          {CLASSES.map(
+                            (item) => (
+                              <button
+                                key={item}
+                                type="button"
+                                className={
+                                  selectedClass ===
+                                    item
+                                    ? "class-option selected"
+                                    : "class-option"
+                                }
+                                onClick={() => {
+                                  setSelectedClass(item);
+                                  setSelectedStream(null);
+                                  setSelectedSubject(null);
+                                  setSelectedCompulsorySubject(null);
+                                  setSelectedMathVariant(null);
+                                }}
+                              >
+                                {item}
+
+                                {selectedClass ===
+                                  item && (
+                                    <span>
+                                      ✓
+                                    </span>
+                                  )}
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      </section>
+
+                      {selectedClass && (
+                        <>
+                          {getClassNumber(selectedClass)! >= 11 && (
+                            <section
+                              key={`stream-${selectedClass}`}
+                              className="course-selector-section course-step-fade"
+                            >
+                              <div className="course-selector-title">
+                                <h3>Select your stream</h3>
+
+                                <span>
+                                  {selectedStream || "Choose one"}
+                                </span>
+                              </div>
+
+                              <div className="subject-grid">
+                                {STREAMS.map((stream) => (
+                                  <button
+                                    key={stream}
+                                    type="button"
+                                    className={
+                                      selectedStream === stream
+                                        ? "subject-option selected"
+                                        : "subject-option"
+                                    }
+                                    onClick={() => {
+                                      setSelectedStream(stream);
+                                      setSelectedSubject(null);
+                                      setSelectedCompulsorySubject(null);
+                                      setSelectedMathVariant(null);
+                                    }}
+                                  >
+                                    <span>
+                                      {stream === "Science"
+                                        ? "⚗"
+                                        : stream === "Commerce"
+                                          ? "₹"
+                                          : "◫"}
+                                    </span>
+
+                                    <b>{stream}</b>
+
+                                    {selectedStream === stream && (
+                                      <i>✓</i>
                                     )}
-                                </button>
-                              ),
-                            )}
-                          </div>
-                        </section>
+                                  </button>
+                                ))}
+                              </div>
+                            </section>
+                          )}
 
-                        <section className="course-selector-section">
-                          <div className="course-selector-title">
-                            <h3>
-                              Select your
-                              subject
-                            </h3>
+                          {getClassNumber(selectedClass)! >= 11 && (
+                            <section
+                              key={`compulsory-${selectedClass}`}
+                              className="course-selector-section course-step-fade"
+                            >
+                              <div className="course-selector-title">
+                                <h3>Compulsory Subjects</h3>
 
-                            <span>
-                              {selectedSubject ||
-                                "Choose one"}
-                            </span>
-                          </div>
+                                <span>
+                                  {selectedCompulsorySubject || "Choose one"}
+                                </span>
+                              </div>
 
-                          <div className="subject-grid">
-                            {SUBJECTS.map(
-                              (subject) => (
+                              <div className="subject-grid compulsory-grid">
                                 <button
-                                  key={
-                                    subject
-                                  }
                                   type="button"
                                   className={
-                                    selectedSubject ===
-                                      subject
+                                    selectedCompulsorySubject === "English"
                                       ? "subject-option selected"
                                       : "subject-option"
                                   }
-                                  onClick={() =>
-                                    setSelectedSubject(
-                                      subject,
-                                    )
-                                  }
+                                  onClick={() => {
+                                    setSelectedCompulsorySubject(
+                                      selectedCompulsorySubject === "English"
+                                        ? null
+                                        : "English",
+                                    );
+                                    setSelectedSubject(null);
+                                    setSelectedMathVariant(null);
+                                  }}
                                 >
-                                  <span>
-                                    {subject ===
-                                      "Mathematics"
-                                      ? "∑"
-                                      : subject ===
-                                        "Science"
-                                        ? "⚗"
-                                        : subject ===
-                                          "Information Technology"
-                                          ? "⌘"
-                                          : subject ===
-                                            "Social Science"
-                                            ? "🌍"
-                                            : "A"}
-                                  </span>
-
-                                  <b>
-                                    {
-                                      subject
-                                    }
-                                  </b>
-
-                                  {selectedSubject ===
-                                    subject && (
-                                      <i>
-                                        ✓
-                                      </i>
-                                    )}
+                                  <span>A</span>
+                                  <b>English</b>
+                                  {selectedCompulsorySubject === "English" && (
+                                    <i>✓</i>
+                                  )}
                                 </button>
-                              ),
+                              </div>
+                            </section>
+                          )}
+
+                          {getSubjectsForSelection(
+                            getClassNumber(selectedClass),
+                            selectedStream,
+                          ).length > 0 && (
+                              <section
+                                key={`subjects-${selectedClass}-${selectedStream || "base"}`}
+                                className="course-selector-section course-step-fade"
+                              >
+                                <div className="course-selector-title">
+                                  <h3>Select your subject</h3>
+
+                                  <span>
+                                    {selectedSubject || "Choose one"}
+                                  </span>
+                                </div>
+
+                                <div className="subject-grid">
+                                  {getSubjectsForSelection(
+                                    getClassNumber(selectedClass),
+                                    selectedStream,
+                                  ).map((subject) => (
+                                    <button
+                                      key={subject}
+                                      type="button"
+                                      className={
+                                        selectedSubject === subject
+                                          ? "subject-option selected"
+                                          : "subject-option"
+                                      }
+                                      onClick={() => {
+                                        setSelectedSubject(
+                                          selectedSubject === subject
+                                            ? null
+                                            : subject,
+                                        );
+                                        setSelectedCompulsorySubject(null);
+
+                                        if (
+                                          subject !== "Mathematics"
+                                        ) {
+                                          setSelectedMathVariant(null);
+                                        }
+                                      }}
+                                    >
+                                      <span>
+                                        {getSubjectIcon(subject)}
+                                      </span>
+
+                                      <b>{subject}</b>
+
+                                      {selectedSubject === subject && (
+                                        <i>✓</i>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              </section>
                             )}
-                          </div>
-                        </section>
 
-                        <div className="add-course-actions">
-                          <button
-                            type="button"
-                            className="add-course-cancel"
-                            onClick={
-                              cancelAddCourse
-                            }
-                            disabled={
-                              addClosing
-                            }
-                          >
-                            Cancel
-                          </button>
+                          {getClassNumber(selectedClass)! >= 11 &&
+                            selectedSubject === "Mathematics" && (
+                              <section
+                                key={`math-${selectedClass}-${selectedStream}`}
+                                className="course-selector-section course-step-fade"
+                              >
+                                <div className="course-selector-title">
+                                  <h3>Mathematics type</h3>
 
-                          <button
-                            type="button"
-                            className="add-course-save"
-                            onClick={
-                              addCourse
-                            }
-                            disabled={
-                              addClosing
-                            }
-                          >
-                            Add Course
-                            <span>
-                              →
-                            </span>
-                          </button>
-                        </div>
+                                  <span>
+                                    {selectedMathVariant ||
+                                      "Choose one"}
+                                  </span>
+                                </div>
+
+                                <div className="subject-grid">
+                                  {(["Pure", "Applied"] as const).map(
+                                    (variant) => (
+                                      <button
+                                        key={variant}
+                                        type="button"
+                                        className={
+                                          selectedMathVariant === variant
+                                            ? "subject-option selected"
+                                            : "subject-option"
+                                        }
+                                        onClick={() =>
+                                          setSelectedMathVariant(
+                                            variant,
+                                          )
+                                        }
+                                      >
+                                        <span>∑</span>
+
+                                        <b>{variant}</b>
+
+                                        {selectedMathVariant ===
+                                          variant && <i>✓</i>}
+                                      </button>
+                                    ),
+                                  )}
+                                </div>
+                              </section>
+                            )}
+                        </>
+                      )}
+
+                      <div className="add-course-actions">
+                        <button
+                          type="button"
+                          className="add-course-cancel"
+                          onClick={
+                            cancelAddCourse
+                          }
+                          disabled={
+                            addClosing
+                          }
+                        >
+                          Cancel
+                        </button>
+
+                        <button
+                          type="button"
+                          className="add-course-save"
+                          onClick={
+                            addCourse
+                          }
+                          disabled={
+                            addClosing || courseSaving
+                          }
+                        >
+                          {courseSaving
+                            ? "Saving..."
+                            : "Add Course"}
+                          <span>
+                            →
+                          </span>
+                        </button>
                       </div>
                     </div>
-                  )}
-                </section>
-              )}
+                  </div>
+                )}
+              </section>
+            )}
           </main>
         </div>
 
@@ -3629,14 +4388,57 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {courseDeleteConfirmOpen && (
+          <div
+            className="modal-back open course-delete-back"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) {
+                setCourseDeleteConfirmOpen(false);
+              }
+            }}
+          >
+            <div
+              className="course-delete-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="course-delete-title"
+            >
+              <div className="course-delete-icon">!</div>
+              <h2 id="course-delete-title">Delete selected courses?</h2>
+              <p>
+                This will permanently remove {selectedCourseIds.length}{" "}
+                {selectedCourseIds.length === 1 ? "course" : "courses"} from your LearnMate account.
+              </p>
+              <div className="course-delete-modal-actions">
+                <button
+                  type="button"
+                  className="course-delete-cancel"
+                  onClick={() => setCourseDeleteConfirmOpen(false)}
+                  disabled={courseDeleteLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="course-delete-confirm"
+                  onClick={handleDeleteSelectedCourses}
+                  disabled={courseDeleteLoading}
+                >
+                  {courseDeleteLoading ? "Deleting..." : "Delete courses"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TOAST */}
 
         {toast && (
           <div
             className={`lm-toast ${toast.type ===
-                "success"
-                ? "success"
-                : "error"
+              "success"
+              ? "success"
+              : "error"
               }`}
             role="alert"
           >
@@ -3707,7 +4509,6 @@ function TypewriterHeading({
     </>
   );
 }
-
 const CSS = `
 :root{
   --brown:#7A2F00;
@@ -4468,14 +5269,12 @@ body{
 ============================================================ */
 
 .lm .courses-page{
+  position:relative;
   width:100%;
   min-width:0;
   padding-top:0
 }
 
-.lm .courses-heading-wrap{
-  min-width:0
-}
 
 .lm .courses-content{
   opacity:0;
@@ -6083,4 +6882,414 @@ body{
     grid-template-columns:1fr
   }
 }
+.lm .course-heading-fade{
+  animation:courseHeadingIn .48s cubic-bezier(.22,1,.36,1) both
+}
+
+.lm .add-course-heading{
+  animation:courseHeadingIn .48s cubic-bezier(.22,1,.36,1) both
+}
+
+@keyframes courseHeadingIn{
+  from{opacity:0;transform:translateY(8px) scale(.99)}
+  to{opacity:1;transform:none}
+}
+
+.lm .course-tab-content{
+  animation:courseTabFade .42s cubic-bezier(.22,1,.36,1) both
+}
+
+@keyframes courseTabFade{
+  from{opacity:0;transform:translateY(10px);filter:blur(2px)}
+  to{opacity:1;transform:none;filter:none}
+}
+
+.lm .course-step-fade{
+  animation:courseStepFade .46s cubic-bezier(.22,1,.36,1) both
+}
+
+@keyframes courseStepFade{
+  from{opacity:0;transform:translateY(12px) scale(.992)}
+  to{opacity:1;transform:none}
+}
+
+/* ==========================================================
+   COURSE SYSTEM — SMOOTH / IPHONE-STYLE INTERACTION
+========================================================== */
+.lm .courses-page{
+  animation:coursePageIn .55s cubic-bezier(.22,1,.36,1) both
+}
+
+@keyframes coursePageIn{
+  from{opacity:0;transform:translateY(10px) scale(.992)}
+  to{opacity:1;transform:none}
+}
+
+.lm .courses-heading-row{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:18px;
+  margin-bottom:22px
+}
+
+.lm .courses-heading-copy .h1{
+  margin-bottom:5px
+}
+
+.lm .courses-heading-copy .sub{
+  margin:0
+}
+
+.lm .course-tabs{
+  background:color-mix(in srgb,var(--card) 88%,transparent);
+  border:1px solid color-mix(in srgb,var(--border) 82%,transparent);
+  box-shadow:0 12px 35px rgba(74,30,0,.06), inset 0 1px 0 rgba(255,255,255,.42);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+
+.lm .course-tab{
+  transition:transform .28s cubic-bezier(.22,1,.36,1),background .28s ease,box-shadow .28s ease,color .28s ease
+}
+
+.lm .course-tab:active{
+  transform:scale(.96)
+}
+
+.lm .course-tab.active{
+  box-shadow:0 7px 20px rgba(122,47,0,.14),inset 0 1px 0 rgba(255,255,255,.34)
+}
+
+.lm .courses-section{
+  border-radius:24px;
+  box-shadow:0 14px 45px rgba(74,30,0,.055);
+  overflow:hidden
+}
+
+.lm .courses-section-head{
+  align-items:center
+}
+
+.lm .courses-section-head h2{
+  letter-spacing:-.025em
+}
+
+.lm .courses-section-head p{
+  margin-top:4px;
+  color:var(--muted);
+  font-size:13px
+}
+
+.lm .course-card{
+  position:relative;
+  overflow:hidden;
+  transition:transform .35s cubic-bezier(.22,1,.36,1),box-shadow .35s ease,border-color .35s ease,background .35s ease;
+  will-change:transform;
+}
+
+.lm .course-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(120deg,rgba(255,255,255,.26),transparent 42%,rgba(233,198,137,.08));
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .35s ease
+}
+
+.lm .course-card:hover{
+  transform:translateY(-4px);
+  box-shadow:0 18px 42px rgba(74,30,0,.10);
+  border-color:color-mix(in srgb,var(--cream) 55%,var(--border))
+}
+
+.lm .course-card:hover::before{
+  opacity:1
+}
+
+.lm .course-card:active{
+  transform:translateY(-1px) scale(.992);
+  transition-duration:.12s
+}
+
+.lm .course-card-selected{
+  outline:2px solid var(--red);
+  outline-offset:2px;
+  box-shadow:0 16px 42px rgba(217,45,32,.12)
+}
+
+.lm .course-select-circle{
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  border:1.5px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  background:color-mix(in srgb,var(--card) 76%,transparent);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.04);
+  transition:all .25s cubic-bezier(.22,1,.36,1)
+}
+
+.lm .course-select-circle.selected{
+  background:var(--red);
+  border-color:var(--red);
+  color:#fff;
+  transform:scale(1.06);
+  box-shadow:0 7px 18px rgba(217,45,32,.22)
+}
+
+.lm .course-open-btn{
+  transition:transform .25s cubic-bezier(.22,1,.36,1),background .25s ease,box-shadow .25s ease
+}
+
+.lm .course-open-btn:hover{
+  transform:translateX(2px)
+}
+
+.lm .course-open-btn:active{
+  transform:scale(.95)
+}
+
+.lm .course-open-btn.selected{
+  background:var(--red);
+  color:#fff
+}
+
+.lm .course-danger-actions{
+  position:sticky;
+  bottom:20px;
+  z-index:90;
+  width:max-content;
+  margin-left:auto;
+  margin-top:10px;
+  margin-bottom:10px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:9px;
+  padding:0;
+}
+.lm .course-delete-fab{
+  width:54px;
+  height:54px;
+  padding:0;
+  border:0;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:#E52B20;
+  box-shadow:0 13px 30px rgba(217,45,32,.28),0 4px 12px rgba(40,12,0,.18);
+  transition:transform .3s cubic-bezier(.22,1,.36,1),box-shadow .3s ease,opacity .2s ease;
+}
+
+.lm .course-delete-fab img{
+  width:28px;
+  height:28px;
+  object-fit:contain;
+  display:block
+}
+
+.lm .course-delete-fab:hover{
+  transform:translateY(-3px) scale(1.035);
+  box-shadow:0 17px 34px rgba(217,45,32,.34),0 5px 14px rgba(40,12,0,.18)
+}
+
+.lm .course-delete-fab:active{
+  transform:scale(.91)
+}
+
+.lm .course-delete-fab:disabled{
+  opacity:.55;
+  cursor:not-allowed
+}
+
+.lm .course-delete-cancel{
+  min-height:38px;
+  padding:9px 13px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--card);
+  color:var(--text);
+  font-size:12px;
+  font-weight:800;
+  box-shadow:0 8px 20px rgba(74,30,0,.08);
+  transition:transform .25s cubic-bezier(.22,1,.36,1),background .25s ease,box-shadow .25s ease
+}
+
+.lm .course-delete-cancel:hover{
+  transform:translateY(-2px);
+  background:var(--card-2);
+  box-shadow:0 11px 24px rgba(74,30,0,.11)
+}
+
+.lm .course-delete-cancel:active{
+  transform:scale(.95)
+}
+
+.lm .course-delete-back{
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  animation:deleteScrimIn .28s ease both
+}
+
+@keyframes deleteScrimIn{
+  from{opacity:0}
+  to{opacity:1}
+}
+
+.lm .course-delete-modal{
+  width:min(450px,calc(100vw - 32px));
+  padding:28px;
+  border:1px solid color-mix(in srgb,var(--border) 86%,white);
+  border-radius:28px;
+  background:color-mix(in srgb,var(--card) 91%,transparent);
+  color:var(--text);
+  box-shadow:0 35px 100px rgba(45,18,0,.22),inset 0 1px 0 rgba(255,255,255,.48);
+  backdrop-filter:blur(26px) saturate(1.1);
+  -webkit-backdrop-filter:blur(26px) saturate(1.1);
+  animation:deleteModalIn .42s cubic-bezier(.22,1,.36,1) both
+}
+
+@keyframes deleteModalIn{
+  from{opacity:0;transform:translateY(18px) scale(.94)}
+  to{opacity:1;transform:none}
+}
+
+.lm .course-delete-icon{
+  width:48px;
+  height:48px;
+  border-radius:16px;
+  display:grid;
+  place-items:center;
+  background:color-mix(in srgb,var(--red) 13%,var(--card));
+  border:1px solid color-mix(in srgb,var(--red) 22%,var(--border));
+  color:var(--red);
+  font-weight:850;
+  margin-bottom:18px
+}
+
+.lm .course-delete-modal h2{
+  margin:0 0 8px;
+  font-size:22px;
+  letter-spacing:-.025em
+}
+
+.lm .course-delete-modal p{
+  margin:0;
+  color:var(--muted);
+  line-height:1.6;
+  font-size:14px
+}
+
+.lm .course-delete-modal-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  margin-top:24px
+}
+
+.lm .courses-empty{
+  min-height:260px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  text-align:center;
+  padding:35px 20px
+}
+
+.lm .courses-empty strong{
+  font-size:16px
+}
+
+.lm .courses-empty > span{
+  color:var(--muted);
+  font-size:13px
+}
+
+.lm .course-loader-orb{
+  width:34px;
+  height:34px;
+  border-radius:50%;
+  border:2px solid var(--border);
+  border-top-color:var(--brown);
+  animation:courseSpin .8s linear infinite;
+  margin-bottom:4px
+}
+
+@keyframes courseSpin{
+  to{transform:rotate(360deg)}
+}
+
+@media(max-width:640px){
+
+  .lm .courses-heading-row{
+    align-items:stretch;
+    flex-direction:column;
+    gap:14px
+  }
+  .lm .add-course-top{
+    width:100%
+  }
+
+  .lm .course-danger-actions{
+    position:fixed !important;
+    right:24px !important;
+    bottom:-80px !important;
+    left:auto !important;
+    top:auto !important;
+    z-index:1000 !important;
+  }
+
+  .lm .course-delete-fab{
+    width:54px;
+    height:54px;
+  }
+
+  .lm .course-delete-fab img{
+    width:25px;
+    height:25px
+  }
+
+  .lm .course-delete-modal{
+    border-radius:24px;
+    padding:24px
+  }
+
+  .lm .course-delete-modal-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr
+  }
+
+}
+  .lm .course-delete-fab img{
+    width:25px;
+    height:25px
+  }
+
+  .lm .course-delete-modal{
+    border-radius:24px;
+    padding:24px
+  }
+
+  .lm .course-delete-modal-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .lm .courses-page,.lm .course-delete-modal,.lm .course-delete-back,.lm .course-loader-orb{
+    animation:none!important
+  }
+
+  .lm .course-card,.lm .course-tab,.lm .course-open-btn,.lm .course-delete-fab,.lm .course-delete-cancel{
+    transition:none!important
+  }
+}
+
 `;

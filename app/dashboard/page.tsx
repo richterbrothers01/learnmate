@@ -109,6 +109,163 @@ const STREAM_SUBJECTS: Record<string, string[]> = {
   ],
 };
 
+
+type CurriculumChapter = { title: string; section?: string };
+type AnswerStat = { courseTitle: string; chapterTitle: string; correct: number; total: number };
+
+/* Mark 3 curriculum. Video URLs intentionally remain empty until supplied. */
+const CURRICULUM: Record<string, CurriculumChapter[]> = {
+  "1|English": ["Two Little Hands", "Greetings", "Life Around Us", "The Cap-seller and the Monkeys", "A Farm", "Food", "The Food we Eat", "Seasons", "Anandi’s Rainbow"].map(title => ({ title })),
+  "1|Mathematics": ["Finding the Furry Cat!", "What is Long? What is Round?", "Mango Treat", "Making 10", "How Many?", "Vegetable Farm", "Lina’s Family", "Fun with Numbers", "Utsav", "How do I Spend my Day?", "How Many Times?", "How Much Can We Spend?", "So Many Toys"].map(title => ({ title })),
+  "2|English": ["My Bicycle", "Picture Reading", "It Is Fun", "Seeing without Seeing", "Come Back Soon", "Between Home and School", "This Is My Town", "A Show of Clouds", "My Name", "The Crow", "The Smart Monkey", "Little Drops of Water", "We Are All Indians"].map(title => ({ title })),
+  "2|Mathematics": ["A Day at the Beach", "Shapes Around Us", "Fun with Numbers", "Shadow Story (Togalu)", "Playing with Lines", "Decoration for Festival", "Rani’s Gift", "Grouping and Sharing", "Which Season Is It?", "Fun at the Fair", "Data Handling"].map(title => ({ title })),
+  "3|English": ["Colours", "Badal and Moti", "Best Friends", "Out in the Garden", "Talking Toys", "Paper Boat", "The Big Laddoo", "Thank God", "Madhu’s Wish", "Night", "Chanda Mama Counts the Stars", "Chandrayaan"].map(title => ({ title })),
+  "3|Mathematics": ["What’s in a Name?", "Toy Joy", "Double Century", "Vacation with My Nani Maa", "Fun with Shapes", "House of Hundreds– I", "Raksha Bandhan", "Fair Share", "House of Hundreds– II", "Fun at Class Party!", "Filling and Lifting", "Give and Take", "Time Goes On", "The Surajkund Fair"].map(title => ({ title })),
+  "3|EVS": ["Family and Friends", "Going to the Mela", "Celebrating Festivals", "Getting to Know Plants", "Plants and Animals Live Together", "Living in Harmony", "Water—A Precious Gift", "Food We Eat", "Staying Healthy and Happy", "This World of Things", "Making Things", "Taking Charge of Waste"].map(title => ({ title })),
+  "4|English": ["Together We Can", "The Tinkling Bells", "Be Smart, Be Safe", "One Thing at a Time", "The Old Stag", "Braille", "Fit Body, Fit Mind, Fit Nation", "The Lagori Champions", "Hekko", "The Swing", "A Journey to the Magical Mountains", "Maheshwar"].map(title => ({ title })),
+  "4|Mathematics": ["Shapes Around Us", "Hide and Seek", "Pattern Around Us", "Thousands Around Us", "Sharing and Measuring", "Measuring Length", "The Cleanest Village", "Weigh it, Pour it", "Equal Groups", "Elephants, Tigers, and Leopards", "Fun with Symmetry", "Ticking Clocks and Turning Calendar", "The Transport Museum", "Data Handling"].map(title => ({ title })),
+  "4|EVS": ["Living Together", "Exploring Our Neighbourhood", "Nature Trail", "Growing up with Nature", "Food for Health", "Happy and Healthy Living", "How Things Work", "How Things are Made", "Different Lands, Different Lives", "Our Sky"].map(title => ({ title })),
+  "5|English": ["Papa’s Spectacles", "Gone with the Scooter", "The Rainbow", "The Wise Parrot", "The Frog", "What a Tank!", "Gilli Danda", "The Decision of the Panchayat", "Vocation", "Glass Bangles"].map(title => ({ title })),
+  "5|Mathematics": ["We the Travellers—I", "Fractions", "Angles as Turns", "We the Travellers—II", "Far and Near", "The Dairy Farm", "Shapes and Patterns", "Weight and Capacity", "Coconut Farm", "Symmetrical Designs", "Grandmother’s Quilt", "Racing Seconds", "Animal Jumps", "Maps and Locations", "Data Through Pictures"].map(title => ({ title })),
+  "5|EVS": ["Water—The Essence of Life", "Journey of a River", "The Mystery of Food", "Our School—A Happy Place", "Our Vibrant Country", "Some Unique Places", "Energy—How Things Work", "Clothes—How Things are Made", "Rhythms of Nature", "Earth—Our Shared Home"].map(title => ({ title })),
+  "6|Social Science": ["Locating Places on the Earth", "Oceans and Continents", "Landforms and Life", "Timeline and Sources of History", "India, That Is Bharat", "The Beginnings of Indian Civilisation", "India’s Cultural Roots", "Unity in Diversity, or ‘Many in the One’", "Family and Community", "Grassroots Democracy — Part 1: Governance", "Grassroots Democracy — Part 2: Local Government in Rural Areas", "Grassroots Democracy — Part 3: Local Government in Urban Areas", "The Value of Work", "Economic Activities Around Us"].map(title => ({ title })),
+  "6|Science": ["The Wonderful World of Science", "Diversity in the Living World", "Mindful Eating: A Path to a Healthy Body", "Exploring Magnets", "Measurement of Length and Motion", "Materials Around Us", "Temperature and its Measurement", "A Journey through States of Water", "Methods of Separation in Everyday Life", "Living Creatures: Exploring their Characteristics", "Nature’s Treasures", "Beyond Earth"].map(title => ({ title })),
+  "6|Mathematics": ["Patterns in Mathematics", "Lines and Angles", "Number Play", "Data Handling and Presentation", "Prime Time", "Perimeter and Area", "Fractions", "Playing with Constructions", "Symmetry", "The Other Side of Zero"].map(title => ({ title })),
+  "6|English": ["A Bottle of Dew", "The Raven and the Fox", "Rama to the Rescue", "The Unlikely Best Friends", "A Friend’s Prayer", "The Chair", "Neem Baba", "What a Bird Thought", "Spices that Heal Us", "Change of Heart", "The Winner", "Yoga—A Way of Life", "Hamara Bharat—Incredible India!", "The Kites", "Ila Sachani: Embroidering Dreams with her Feet", "National War Memorial"].map(title => ({ title })),
+  "7|Social Science": ["Geographical Diversity of India", "Understanding the Weather", "Climates of India", "New Beginnings: Cities and States", "The Rise of Empires", "The Age of Reorganisation", "The Gupta Era: An Age of Tireless Creativity", "How the Land Becomes Sacred", "From the Rulers to the Ruled: Types of Governments", "The Constitution of India — An Introduction", "From Barter to Money", "Understanding Markets", "The Story of Indian Farming", "India and Her Neighbours", "Empires and Kingdoms: 6th to 10th Centuries", "Turning Tides: 11th and 12th Centuries", "India, a Home to Many", "The State, the Government, and You", "Infrastructure: Engine of India’s Development", "Banks and the Magic of Finance"].map(title => ({ title })),
+  "7|Science": ["The Ever-Evolving World of Science", "Exploring Substances: Acidic, Basic, and Neutral", "Electricity: Circuits and their Components", "The World of Metals and Non-metals", "Changes Around Us: Physical and Chemical", "Adolescence: A Stage of Growth and Change", "Heat Transfer in Nature", "Measurement of Time and Motion", "Life Processes in Animals", "Life Processes in Plants", "Light: Shadows and Reflections", "Earth, Moon, and the Sun"].map(title => ({ title })),
+  "7|Mathematics": ["Large Numbers Around Us", "Arithmetic Expressions", "A Peek Beyond the Point", "Expressions using Letter-Numbers", "Parallel and Intersecting Lines", "Number Play", "A Tale of Three Intersecting Lines", "Working with Fractions", "Geometric Twins", "Operations with Integers", "Finding Common Ground", "Another Peek Beyond the Point", "Connecting the Dots...", "Constructions and Tilings", "Finding the Unknown"].map(title => ({ title })),
+  "7|English": ["The Day the River Spoke", "Try Again", "Three Days to See", "Animals, Birds, and Dr. Dolittle", "A Funny Man", "Say the Right Thing", "My Brother’s Great Invention", "Paper Boats", "North, South, East, West", "The Tunnel", "Travel", "Conquering the Summit", "A Homage to Our Brave Soldiers", "My Dear Soldiers", "Rani Abbakka"].map(title => ({ title })),
+  "8|Social Science": ["Natural Resources and Their Use", "Reshaping India’s Political Map", "The Rise of the Marathas", "The Colonial Era in India", "Universal Franchise and India’s Electoral System", "The Parliamentary System: Legislature and Executive", "Factors of Production", "World Geography: Some Glimpses", "India’s Long Road to Independence", "A Journey Through Indian Architecture", "The Role of the Judiciary in Our Society", "Citizenship: Rights and Duties", "Dynamics of Population", "India’s Urban Landscape", "Cultural Currents: 13th to 17th Centuries"].map(title => ({ title })),
+  "8|Science": ["Exploring the Investigative World of Science", "The Invisible Living World: Beyond Our Naked Eye", "Health: The Ultimate Treasure", "Electricity: Magnetic and Heating Effects", "Exploring Forces", "Pressure, Winds, Storms, and Cyclones", "Particulate Nature of Matter", "Nature of Matter: Elements, Compounds, and Mixtures", "The Amazing World of Solutes, Solvents, and Solutions", "Light: Mirrors and Lenses", "Keeping Time with the Skies", "How Nature Works in Harmony", "Our Home: Earth, a Unique Life Sustaining Planet"].map(title => ({ title })),
+  "8|Mathematics": ["A Square and A Cube", "Power Play", "A Story of Numbers", "Quadrilaterals", "Number Play", "We Distribute, Yet Things Multiply", "Proportional Reasoning-1", "Fractions in Disguise", "The Baudhayana-Pythagoras Theorem", "Proportional Reasoning-2", "Exploring Some Geometric Themes", "Tales by Dots and Lines", "Algebra Play", "Area"].map(title => ({ title })),
+  "8|English": ["The Wit that Won Hearts", "A Concrete Example", "Wisdom Paves the Way", "A Tale of Valour: Major Somnath Sharma and the Battle of Badgam", "Somebody’s Mother", "Verghese Kurien—I Too Had A Dream", "The Case of the Fifth Word", "The Magic Brush of Dreams", "Spectacular Wonders", "The Cherry Tree", "Harvest Hymn", "Waiting for the Rain", "Feathered Friend", "Magnifying Glass", "Bibha Chowdhuri: The Beam of Light that Lit the Path for Women in Indian Science"].map(title => ({ title })),
+  "9|Social Science": [
+    "Understanding Social Science",
+    "Shaping of the Earth’s Surface",
+    "Atmosphere and Climate",
+    "Early Humans and Beginning of Civilisation",
+    "State and Society up to 1000 CE",
+    "Democracy",
+    "Elections",
+    "Building Blocks in Economics: The Problem of Choice",
+    "The Price Puzzle: What Drives the Market",
+    "Ocean and Life",
+    "Life on Earth",
+    "Resistance and Resilience (1000 to 1700 CE)",
+    "Government and Public Policy",
+    "Managing Your Personal Finances",
+    "From Ideas to Startup"
+  ].map(title => ({ title })),
+  "9|Science": ["Exploration: Entering the World of Secondary Science", "Cell: The Building Block of Life", "Tissues in Action", "Describing Motion Around Us", "Exploring Mixtures and their Separation", "How Forces Affect Motion", "Work, Energy, and Simple Machines", "Journey Inside the Atom", "Atomic Foundations of Matter", "Sound Waves: Characteristics and Applications", "Reproduction: How Life Continues", "Patterns in Life: Diversity and Classification", "Earth as a System: Energy, Matter, and Life"].map(title => ({ title })),
+  "9|Mathematics": ["Orienting Yourself: The Use of Coordinates", "Introduction to Linear Polynomials", "The World of Numbers", "Exploring Algebraic Identities", "I’m Up and Down, and Round and Round", "Measuring Space: Perimeter and Area", "The Mathematics of Maybe: Introduction to Probability", "Predicting What Comes Next: Exploring Sequences and Progressions", "Propositions and their Converses", "How Quantities Combine: Understanding Data", "The World of Algorithms", "Quadrilaterals", "Two Variables, One Line", "Math of Space: Surface Area and Volume"].map(title => ({ title })),
+  "9|English": ["How I Taught My Grandmother to Read", "Bharat Our Land", "The Pot Maker", "Gifts of Grace: Honouring Our Vocations", "Winds of Change", "Canvas of Soil", "Vitamin-M", "I Cannot Remember My Mother", "The World of Limitless Possibilities", "Nine Gold Medals", "Twin Melodies", "A Friend Found in Music", "Carrier of Words", "Words", "Follow That Dream", "Believe in Yourself"].map(title => ({ title })),
+  "10|Social Science": ["Resources and Development", "Forest and Wildlife Resources", "Water Resources", "Agriculture", "Minerals and Energy Resources", "Manufacturing Industries", "Lifelines of National Economy", "Development", "Sectors of the Indian Economy", "Money and Credit", "Globalisation and the Indian Economy", "Consumer Rights", "Power-sharing", "Federalism", "Gender, Religion and Caste", "Political Parties", "Outcomes of Democracy", "The Rise of Nationalism in Europe", "Nationalism in India", "The Making of a Global World", "The Age of Industrialisation", "Print Culture and the Modern World"].map(title => ({ title })),
+  "10|Science": ["Chemical Reactions and Equations", "Acids, Bases and Salts", "Metals and Non-metals", "Carbon and its Compounds", "Life Processes", "Control and Coordination", "How do Organisms Reproduce?", "Heredity", "Light – Reflection and Refraction", "The Human Eye and the Colourful World", "Electricity", "Magnetic Effects of Electric Current", "Our Environment"].map(title => ({ title })),
+  "10|Mathematics": ["Real Numbers", "Polynomials", "Pair of Linear Equations in Two Variables", "Quadratic Equations", "Arithmetic Progressions", "Triangles", "Coordinate Geometry", "Introduction to Trigonometry", "Some Applications of Trigonometry", "Circles", "Areas Related to Circles", "Surface Areas and Volumes", "Statistics", "Probability"].map(title => ({ title })),
+  "10|English": [
+    ...["A Letter to God", "Nelson Mandela: Long Walk to Freedom", "Two Stories about Flying", "From the Diary of Anne Frank", "Glimpses of India", "Mijbil the Otter", "Madam Rides the Bus", "The Sermon at Benares", "The Proposal"].map(title => ({ title, section: "Main Literature" })),
+    ...["A Triumph of Surgery", "The Thief’s Story", "The Midnight Visitor", "A Question of Trust", "Footprints without Feet", "The Making of a Scientist", "The Necklace", "Bholi", "The Book That Saved the Earth"].map(title => ({ title, section: "Side Literature" })),
+    ...["A Letter to God", "Nelson Mandela: Long Walk to Freedom", "Two Stories about Flying", "From the Diary of Anne Frank", "Glimpses of India", "Mijbil the Otter", "Madam Rides the Bus", "The Sermon at Benaras", "The Proposal"].map(title => ({ title, section: "Grammar" }))
+  ],
+  "11|English": [
+    ...["The Portrait of a Lady", "A Photograph", "We’re Not Afraid to Die... if We Can All Be Together", "Discovering Tut: the Saga Continues", "The Laburnum Top", "The Voice of the Rain", "The Ailing Planet: the Green Movement’s Role", "Childhood", "The Adventure", "Silk Road", "Father to Son"].map(title => ({ title, section: "Main Literature" })),
+    ...["The Summer of the Beautiful White Horse", "The Address", "Mother’s Day", "Birth", "The Tale of Melon City"].map(title => ({ title, section: "Side Literature" })),
+    ...["Note-making", "Summarising", "Sub-titling", "Essay-writing", "Letter-writing", "Creative Writing"].map(title => ({ title, section: "Writing Skills" }))
+  ],
+  "11|Physics": ["Units and Measurement", "Motion in a Straight Line", "Motion in a Plane", "Laws of Motion", "Work, Energy and Power", "System of Particles and Rotational Motion", "Gravitation", "Mechanical Properties of Solids", "Mechanical Properties of Fluids", "Thermal Properties of Matter", "Thermodynamics", "Kinetic Theory", "Oscillations", "Waves"].map(title => ({ title })),
+  "11|Chemistry": ["Some Basic Concepts of Chemistry", "Structure of Atom", "Classification of Elements and Periodicity in Properties", "Chemical Bonding and Molecular Structure", "Thermodynamics", "Equilibrium", "Redox Reaction", "Organic Chemistry: Some Basic Principles and Techniques", "Hydrocarbons"].map(title => ({ title })),
+  "11|Biology": ["The Living World", "Biological Classification", "Plant Kingdom", "Animal Kingdom", "Morphology of Flowering Plants", "Anatomy of Flowering Plants", "Structural Organization in Animals", "Cell: The Unit of Life", "Biomolecules", "Cell Cycle and Cell Division", "Photosynthesis in Higher Plants", "Respiration in Plants", "Plant Growth and Development", "Breathing and Excretion", "Body Fluids and Circulation", "Excretory Products and Their Elimination", "Locomotion and Movement", "Neural Control and Coordination", "Chemical Coordination and Integration"].map(title => ({ title })),
+  "11|Pure Mathematics": ["Sets", "Relations and Functions", "Trigonometric Functions", "Complex Numbers and Quadratic Equations", "Linear Inequalities", "Permutations and Combinations", "Binomial Theorem", "Sequences and Series", "Straight Lines", "Conic Sections", "Introduction to Three-Dimensional Geometry", "Limits and Derivatives", "Statistics", "Probability"].map(title => ({ title })),
+  "11|Applied Mathematics": ["Prime Number", "Ratio, Proportion, and Logarithms", "Interpretation of Data", "Analysis of Data", "Commercial Mathematics", "Set Theory", "Relation and Function", "Complex Number", "Sequence and Series", "Permutations and Combinations", "Trigonometry"].map(title => ({ title })),
+  "11|Computer Science": ["Computer System", "Encoding Schemes and Number System", "Emerging Trends", "Introduction to Problem Solving", "Getting Started with Python", "Flow of Control", "Functions", "Strings", "List", "Tuples and Dictionaries", "Societal Impact"].map(title => ({ title })),
+  "11|Accountancy": ["Introduction to Accounting", "Theory Base of Accounting", "Recording of Transactions - I", "Recording of Transactions - II", "Bank Reconciliation Statement", "Trial Balance and Rectification of Errors", "Depreciation", "Provisions and Reserves", "Financial Statements 1", "Financial Statements 2"].map(title => ({ title })),
+  "11|Business Studies": ["Business, Commerce, Trade and Commerce", "Forms of Business and Forms of Business Organization", "Private, Public, and Global Enterprises", "Business Services", "Emerging Models of Business", "Social Responsibilities of Business and Business Ethics", "Formation of a Company", "Sources of Business Finance", "MSME and Business Entrepreneurship", "Capsule Clothes and Business Entrepreneurship", "Internal Trade", "International Business"].map(title => ({ title })),
+  "11|Economics": [
+    ...["Introduction", "Collection of Data", "Organization of Data", "Presentation of Data", "Measures of Central Tendency", "Correlation", "Index Number", "Use of Statistical Tools"].map(title => ({ title, section: "Statistics" })),
+    ...["Indian Economy on the Eve of Independence", "Indian Economy, 1950 to 1990", "Liberalisation, Privatisation, and Globalisation: An Appraisal", "Human Capital Formation in India", "Rural Development", "Employment: Growth, Informalization and Other Issues", "Environment and Sustainable Development", "Comparative Development Experiences of India and Its Neighbours"].map(title => ({ title, section: "Main Economics" }))
+  ],
+  "11|History": ["Writing on City Life", "An Empire Across Three Continents", "Nomadic Empires", "The Three Orders", "Changing Cultural Traditions", "Displacing Indigenous People", "Paths to Modernization"].map(title => ({ title })),
+  "11|Political Science": [
+    ...["Constitution: Why and How?", "Rights in the Indian Constitution", "Election and Representation", "Executive", "Legislature", "Judiciary", "Federalism", "Local Government", "Constitution as a Living Document", "The Philosophy of Constitution"].map(title => ({ title, section: "Part A" })),
+    ...["Political Theory: An Introduction", "Freedom", "Equality", "Social Justice", "Rights", "Citizenship", "Nationalism", "Civilisation"].map(title => ({ title, section: "Part B" }))
+  ],
+  "11|Geography": [
+    ...["Geography as a Discipline", "The Origin and Evolution of the Earth", "Interior of the Earth", "Distribution of Oceans and Continents", "Geomorphic Processes", "Landforms and Their Evolution", "Composition and Structure of Atmosphere", "Solar Radiation, Heat Balance, and Temperature", "Atmospheric Circulation and Weather Systems", "Water in the Atmosphere", "World Climate and Climate Change", "Water (Oceans)", "Movement of Ocean Water", "Biodiversity and Conservation"].map(title => ({ title, section: "Book A" })),
+    ...["India — Location", "Structure and Physiography", "Drainage System", "Climate", "Natural Vegetation", "Natural Hazards and Disasters"].map(title => ({ title, section: "Book B" }))
+  ],
+  "11|Sociology": [
+    ...["Sociology and Society", "Terms, Concepts, and Their Use in Sociology", "Understanding Social Institutions", "Culture and Socialisation", "Doing Sociology: Research Methods"].map(title => ({ title, section: "Part 1" })),
+    ...["Social Structure, Stratification, and Social Processes in Society", "Social Change and Social Order in Rural and Urban Society", "Environment and Society", "Introducing Western Sociologists", "Indian Sociologists"].map(title => ({ title, section: "Part 2" }))
+  ],
+  "11|Psychology": ["What Is Psychology?", "Methods of Enquiry in Psychology", "Human Development", "Sensory, Attentional, and Perceptual Processes", "Learning", "Human Memory", "Thinking", "Motivation and Emotion"].map(title => ({ title })),
+  "12|English": [
+    ...["The Last Lesson", "Lost Spring", "Deep Water", "The Rat Trap", "Indigo", "Poets and Pancakes", "The Interview", "Going Places"].map(title => ({ title, section: "Prose" })),
+    ...["My Mother at Sixty-Six", "Keeping Quiet", "A Thing of Beauty", "A Roadside Stand", "Aunt Jennifer’s Tigers"].map(title => ({ title, section: "Poetry" })),
+    ...["The Third Level", "The Tiger King", "Journey to the End of the Earth", "The Enemy", "On the Face of It", "Memories of Childhood"].map(title => ({ title, section: "Supplementary Reader" }))
+  ],
+  "12|Physics": ["Electric Charges and Fields", "Electrostatic Potential and Capacitance", "Current Electricity", "Moving Charges and Magnetism", "Magnetism and Matter", "Electromagnetic Induction", "Alternating Current", "Electromagnetic Waves", "Ray Optics and Optical Instruments", "Wave Optics", "Dual Nature of Radiation and Matter", "Atoms", "Nuclei", "Semiconductor Electronics: Materials, Devices, and Simple Circuits"].map(title => ({ title })),
+  "12|Chemistry": ["Solutions", "Electrochemistry", "Chemical Kinetics", "The D- and F-Block Elements", "Coordination Compounds", "Haloalkanes and Haloarenes", "Alcohols, Phenols, and Ethers", "Aldehydes, Ketones, and Carboxylic Acids", "Amines", "Biomolecules"].map(title => ({ title })),
+  "12|Biology": ["Sexual Reproduction and Flowering Plants", "Human Reproduction", "Reproductive Health", "Principles of Inheritance and Variation", "Molecular Basis of Inheritance", "Evolution", "Human Health and Disease", "Microbes in Human Welfare", "Biotechnology: Principle and Processes", "Biotechnology and Applications", "Organisms and Populations", "Ecosystem", "Biodiversity and Conservation"].map(title => ({ title })),
+  "12|Pure Mathematics": ["Relations and Functions", "Inverse Trigonometric Functions", "Matrices", "Determinants", "Continuity and Differentiability", "Application of Derivatives", "Integrals", "Application of Integrals", "Differential Equation", "Vector Algebra", "Three-Dimensional Geometry", "Linear Programming", "Probability"].map(title => ({ title })),
+  "12|Applied Mathematics": ["Numbers, Quantification, and Numerical Applications", "Algebra", "Differentiation and Its Application", "Integration and Its Applications", "Differential Equations and Modeling", "Probability Distributions", "Inferential Statistics", "Index Numbers and Time-Based Data", "Financial Mathematics", "Linear Programming Problem", "Practical and Project Work"].map(title => ({ title })),
+  "12|Computer Science": ["Exception Handling in Python", "File Handling in Python", "Stack", "Queue", "Sorting", "Searching", "Understanding Data", "Database Concept", "Structured Query Language (SQL)", "Computer Network", "Data Communications", "Security Aspect", "Project-Based Learning"].map(title => ({ title })),
+  "12|Accountancy": ["Accounting for Partnership: Basic Concept", "Reconstitution of a Partnership Firm - Admission of a Partner", "Reconstitution of a Partnership Firm - Retirement/Death of a Partner", "Dissolution of Partnership Firm", "Accounting for Share Capital", "Issue and Redemption of Debentures", "Financial Statements of a Company", "Analysis of Financial Statements", "Accounting Ratios", "Cash Flow Statement"].map(title => ({ title })),
+  "12|Business Studies": ["Nature and Significance of Management", "Principles of Management", "Business Environment", "Planning", "Organising", "Staffing", "Directing", "Controlling", "Financial Management", "Marketing", "Consumer Protection"].map(title => ({ title })),
+  "12|Economics": [
+    ...["Introduction", "Theory of Consumer Behavior", "Production Cost", "The Theory of the Firm under Perfect Competition", "Market Equilibrium"].map(title => ({ title, section: "Microeconomics" })),
+    ...["Introduction", "National Income Accounting", "Money and Banking", "Determination of Income and Employment", "Government Budget and the Economy", "Open Economy Macroeconomics"].map(title => ({ title, section: "Macroeconomics" }))
+  ],
+  "12|History": ["Kings, Farmers, and Towns", "Kinship: Caste and Class", "Thinkers, Beliefs, and Buildings", "Through the Eyes of a Traveler", "Bhakti Sufi Tradition", "An Imperial Capital: Vijayanagara", "Peasants, Zamindars and the State", "Colonialism and the Countryside", "Rebels and the Raj", "Mahatma Gandhi and the Nationalist Movement", "Framing the Constitution"].map(title => ({ title })),
+  "12|Political Science": [
+    ...["The End of Bipolarity", "Contemporary Centres of Power", "Contemporary South Asia", "International Organisations", "Security in the Contemporary World", "Environment and Natural Resources", "Globalisation"].map(title => ({ title, section: "Part A" })),
+    ...["Challenges of Nation Building", "Era of One-Party Dominance", "Politics of Planned Development", "India’s External Relations", "Challenges to and Restoration of the Congress System", "The Crisis of Democratic Order", "Regional Aspirations", "Recent Developments in Indian Politics"].map(title => ({ title, section: "Part B" }))
+  ],
+  "12|Geography": ["Human Geography—Nature and Scope", "The World Population—Distribution, Density and Growth", "Human Development", "Primary Activities", "Secondary Activities", "Tertiary and Quaternary Activities", "Transport and Communication", "International Trade"].map(title => ({ title })),
+  "12|Sociology": [
+    ...["Introducing Indian Society", "The Demographic Structure of Indian Society", "Social Institutions: Continuity and Change", "The Market as a Social Institution", "Patterns of Social Inequality and Exclusion", "The Challenges of Cultural Diversity", "Suggestions for Project Work"].map(title => ({ title, section: "Part 1" })),
+    ...["Structural Change", "Cultural Change", "The Constitution and Social Change", "Change and Development in Rural Society", "Change and Development in Industrial Society", "Globalization and Social Change", "Mass Media and Communications", "Social Movements"].map(title => ({ title, section: "Part 2" }))
+  ],
+  "12|Psychology": ["Variations in Psychological Attributes", "Self and Personality", "Meeting Life Challenges", "Psychological Disorders", "Therapeutic Approaches", "Attitude and Social Cognition", "Social Influence and Group Processes"].map(title => ({ title }))
+};
+
+function getCurriculumKey(course: Course): string {
+  const subject = course.subject.trim();
+  const aliases: Record<string, string> = {
+    "Social Studies": "Social Science", "Social Sciences": "Social Science",
+    "Maths": "Mathematics", "Computer Science (Science)": "Computer Science",
+    "Mathematics (Pure)": "Pure Mathematics", "Mathematics (Applied)": "Applied Mathematics"
+  };
+  let normalized = aliases[subject] || subject;
+  if (course.mathVariant === "Pure") normalized = "Pure Mathematics";
+  if (course.mathVariant === "Applied") normalized = "Applied Mathematics";
+  return `${course.classLevel}|${normalized}`;
+}
+
+function getCourseChapters(course: Course): CurriculumChapter[] {
+  const key = getCurriculumKey(course);
+  if (CURRICULUM[key]) return CURRICULUM[key];
+  // Some school databases store stream-specific subjects as generic Mathematics.
+  if (course.classLevel >= 11 && course.subject === "Mathematics") {
+    const variant = course.mathVariant || "Pure";
+    return CURRICULUM[`${course.classLevel}|${variant} Mathematics`] || [];
+  }
+  return [];
+}
+
+function getWeekStart(date = new Date()): string {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const mondayOffset = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - mondayOffset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatStudyTime(seconds: number): string {
+  const mins = Math.floor(Math.max(0, seconds) / 60);
+  const hours = Math.floor(mins / 60);
+  return `${hours}h ${mins % 60}m`;
+}
+
 function getStreakMeta(days: number): StreakMeta {
   if (days <= 3) {
     return {
@@ -476,6 +633,12 @@ export default function DashboardPage() {
 
   const [courseDeleteConfirmOpen, setCourseDeleteConfirmOpen] =
     useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<CurriculumChapter | null>(null);
+  const [weeklyStudySeconds, setWeeklyStudySeconds] = useState(0);
+  const [answerStats, setAnswerStats] = useState<AnswerStat[]>([]);
+  const [nextTestDate, setNextTestDate] = useState<string | null>(null);
+
 
   useEffect(() => {
     const savedSection =
@@ -1047,6 +1210,12 @@ export default function DashboardPage() {
       ? ongoingCourses
       : completedCourses;
 
+  const mostCompletedCourse = [...courses].sort((a, b) => b.progress - a.progress)[0] || null;
+  const selectedCourse = courses.find(course => course.id === selectedCourseId) || null;
+  const selectedCourseChapters = selectedCourse ? getCourseChapters(selectedCourse) : [];
+  const strongestTopic = answerStats.filter(x => x.total > 0).sort((a, b) => (b.correct / b.total) - (a.correct / a.total))[0] || null;
+  const weakestTopic = answerStats.filter(x => x.total > 0).sort((a, b) => (a.correct / a.total) - (b.correct / b.total))[0] || null;
+
   /* ==========================================================
      LOAD PROFILE
   ========================================================== */
@@ -1404,6 +1573,7 @@ export default function DashboardPage() {
           .from("profiles")
           .update({
             fullname: cleaned,
+            login_name: cleaned,
           })
           .eq("id", authUser.id);
 
@@ -1470,6 +1640,7 @@ export default function DashboardPage() {
           .from("profiles")
           .update({
             fullname: cleaned,
+            login_name: cleaned,
           })
           .eq("id", authUser.id);
 
@@ -1612,6 +1783,7 @@ export default function DashboardPage() {
           .from("profiles")
           .update({
             fullname: cleaned,
+            login_name: cleaned,
           })
           .eq("id", authUser.id);
 
@@ -2304,6 +2476,41 @@ export default function DashboardPage() {
     }
   };
 
+  /* Mark 3 weekly study timer. Counts only while a lesson/course view is open. */
+  useEffect(() => {
+    const readCurrentWeek = () => {
+      try { setWeeklyStudySeconds(Number(localStorage.getItem(`learnmate-study-time:${getWeekStart()}`) || 0)); }
+      catch { setWeeklyStudySeconds(0); }
+    };
+    readCurrentWeek();
+    const active = activeSection === "courses" && Boolean(selectedCourseId);
+    if (!active) return;
+    const timer = window.setInterval(() => {
+      const key = `learnmate-study-time:${getWeekStart()}`;
+      setWeeklyStudySeconds(() => {
+        let next = 1;
+        try {
+          next = Number(localStorage.getItem(key) || 0) + 1;
+          localStorage.setItem(key, String(next));
+        } catch { }
+        return next;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeSection, selectedCourseId]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("learnmate-chapter-answer-stats");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setAnswerStats(parsed.filter((x: any) => x && typeof x.chapterTitle === "string" && typeof x.courseTitle === "string"));
+      }
+      const test = localStorage.getItem("learnmate-next-test-date");
+      if (test) setNextTestDate(test);
+    } catch { /* optional local Mark 3 stats */ }
+  }, []);
+
   /* ==========================================================
      DISPLAY
   ========================================================== */
@@ -2403,7 +2610,6 @@ export default function DashboardPage() {
                     "courses" &&
                     item.label ===
                     "My Courses");
-
                 return (
                   <button
                     key={item.label}
@@ -2703,7 +2909,7 @@ export default function DashboardPage() {
                     <div className="card stat reveal d1">
                       <ProgressRing
                         value={
-                          MOCK_OVERALL_PROGRESS
+                          mostCompletedCourse?.progress ?? 0
                         }
                         animate
                       />
@@ -2713,8 +2919,8 @@ export default function DashboardPage() {
                           Overall Progress
                         </b>
 
-                        <small>
-                          Across all courses
+                        <small className="overall-course-name">
+                          {mostCompletedCourse ? mostCompletedCourse.title : "No courses added"}
                         </small>
                       </div>
                     </div>
@@ -2782,9 +2988,7 @@ export default function DashboardPage() {
                         </b>
 
                         <div className="big">
-                          {
-                            MOCK_STUDY_TIME
-                          }
+                          {formatStudyTime(weeklyStudySeconds)}
                         </div>
 
                         <small>
@@ -2842,108 +3046,37 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="hero-body">
-                          <div className="empty-course">
-                            <div className="empty-course-icon">
-                              📚
-                            </div>
-
-                            <div className="hero-info">
-                              <h3>
-                                Add New
-                                Course
-                              </h3>
-
-                              <p className="empty-course-text">
-                                add new
-                                course to
-                                continue
-                                learning
-                              </p>
-
-                              <div className="bar">
-                                <i
-                                  style={{
-                                    width:
-                                      "0%",
-                                  }}
-                                />
+                          {mostCompletedCourse ? (
+                            <div className="empty-course continue-course">
+                              <div className="empty-course-icon">📚</div>
+                              <div className="hero-info">
+                                <h3>{mostCompletedCourse.subject}{mostCompletedCourse.mathVariant ? ` (${mostCompletedCourse.mathVariant})` : ""}</h3>
+                                <p>{mostCompletedCourse.class}{mostCompletedCourse.stream ? ` · ${mostCompletedCourse.stream}` : ""}</p>
+                                <div className="bar"><i style={{ width: `${mostCompletedCourse.progress}%` }} /></div>
+                                <div className="hero-meta"><span>{mostCompletedCourse.progress >= 100 ? "Course completed" : "Continue where you left off"}</span><span className="pct">{mostCompletedCourse.progress}%</span></div>
                               </div>
-
-                              <div className="hero-meta">
-                                <span className="empty-course-text">
-                                  No course
-                                  added yet
-                                </span>
-
-                                <span className="pct">
-                                  0%
-                                </span>
-                              </div>
+                              <button type="button" className="btn-cream" onClick={() => { setActiveSection("courses"); sessionStorage.setItem("learnmate-active-section", "courses"); setSelectedCourseId(mostCompletedCourse.id); setSelectedChapter(null); }}>
+                                {mostCompletedCourse.progress >= 100 ? "Review Course" : "Continue Learning"} <span>→</span>
+                              </button>
                             </div>
-
-                            <button
-                              type="button"
-                              className="btn-cream"
-                              onClick={() => {
-                                setActiveSection(
-                                  "courses",
-                                );
-
-                                sessionStorage.setItem(
-                                  "learnmate-active-section",
-                                  "courses",
-                                );
-
-                                openAddCourse();
-                              }}
-                            >
-                              Add Course{" "}
-                              <span>
-                                →
-                              </span>
-                            </button>
-                          </div>
+                          ) : (
+                            <div className="empty-course">
+                              <div className="empty-course-icon">📚</div>
+                              <div className="hero-info"><h3>Add New Course</h3><p className="empty-course-text">Add a course to start learning.</p></div>
+                              <button type="button" className="btn-cream" onClick={() => { setActiveSection("courses"); sessionStorage.setItem("learnmate-active-section", "courses"); openAddCourse(); }}>Add Course <span>→</span></button>
+                            </div>
+                          )}
                         </div>
                       </section>
 
-                      <section
-                        className="perf3 reveal d4"
-                        aria-label="Performance"
-                      >
+                      <section className="perf3 reveal d4 mark3-topic-grid" aria-label="Topic accuracy">
                         <div className="card pad">
-                          <h3>
-                            📊 Your
-                            Performance
-                          </h3>
-
-                          <div className="empty-section">
-                            add new
-                            course
-                          </div>
+                          <h3>⭐ Strong Topics</h3>
+                          {strongestTopic ? <div className="topic-result"><b>{strongestTopic.chapterTitle}</b><span>{strongestTopic.courseTitle}</span><strong>{Math.round(strongestTopic.correct / strongestTopic.total * 100)}% correct</strong></div> : <div className="empty-section">Chapter accuracy will appear after you answer questions.</div>}
                         </div>
-
-                        <div className="card pad">
-                          <h3>
-                            ⭐ Strong
-                            Topics
-                          </h3>
-
-                          <div className="empty-section">
-                            add new
-                            course
-                          </div>
-                        </div>
-
                         <div className="card pad needs-attention-card">
-                          <h3 className="warn-title">
-                            ⚠️ Needs
-                            Attention
-                          </h3>
-
-                          <div className="empty-section">
-                            add new
-                            course
-                          </div>
+                          <h3 className="warn-title">⚠️ Needs Attention</h3>
+                          {weakestTopic ? <div className="topic-result"><b>{weakestTopic.chapterTitle}</b><span>{weakestTopic.courseTitle}</span><strong>{Math.round(weakestTopic.correct / weakestTopic.total * 100)}% correct</strong></div> : <div className="empty-section">Your lowest-accuracy chapter will appear here after you answer questions.</div>}
                         </div>
                       </section>
 
@@ -2974,22 +3107,8 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="empty-section">
-                          add new course
+                          {nextTestDate ? `Next test: ${new Date(`${nextTestDate}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}` : "No upcoming test scheduled"}
                         </div>
-                      </section>
-
-                      <section
-                        className="card journey reveal d5"
-                        aria-label="Learning journey"
-                      >
-                        <b>
-                          📖 LEARNING
-                          JOURNEY
-                        </b>
-
-                        <span className="empty-section">
-                          add new course
-                        </span>
                       </section>
                     </div>
                   </div>
@@ -3005,7 +3124,47 @@ export default function DashboardPage() {
                 className="courses-page"
                 aria-label="My Courses"
               >
-                {!addOpen && !addClosing && (
+                {selectedCourseId && selectedCourse && !selectedChapter && !addOpen && !addClosing && (
+                  <section className="chapter-page courses-content courses-content-visible">
+                    <div className="courses-heading-row">
+                      <div className="courses-heading-copy"><button type="button" className="back-link" onClick={() => setSelectedCourseId(null)}>← My Courses</button><h1 className="h1">{selectedCourse.class} · {selectedCourse.subject}</h1><p className="sub">Choose a chapter to start learning.</p></div>
+                      <span className="course-status">{selectedCourse.progress}% complete</span>
+                    </div>
+                    {selectedCourseChapters.length ? (
+                      <div className="chapter-list">
+                        {Array.from(new Set(selectedCourseChapters.map(ch => ch.section || "Chapters"))).map(section => (
+                          <div className="chapter-group" key={section}>
+                            {section !== "Chapters" && <h2>{section}</h2>}
+                            <div className="chapter-grid">
+                              {selectedCourseChapters.filter(ch => (ch.section || "Chapters") === section).map((chapter, index) => (
+                                <button type="button" className="chapter-card" key={`${section}-${chapter.title}-${index}`} onClick={() => setSelectedChapter(chapter)}>
+                                  <span className="chapter-number">{selectedCourseChapters.indexOf(chapter) + 1}</span><span className="chapter-copy"><b>{chapter.title}</b><small>Video lesson</small></span><span className="chapter-arrow">→</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <div className="courses-empty"><strong>Chapters are not configured yet</strong><span>The curriculum list for this subject is not available in Mark 3.</span></div>}
+                  </section>
+                )}
+
+                {selectedCourseId && selectedCourse && selectedChapter && !addOpen && !addClosing && (
+                  <section className="lesson-page courses-content courses-content-visible">
+                    <div className="courses-heading-row">
+                      <div className="courses-heading-copy"><button type="button" className="back-link" onClick={() => setSelectedChapter(null)}>← Back to chapters</button><h1 className="h1">{selectedChapter.title}</h1><p className="sub">{selectedCourse.class} · {selectedCourse.subject}</p></div>
+                    </div>
+                    <div className="lesson-layout">
+                      <div className="lesson-player">
+                        {(() => { const videoSrc = ""; return videoSrc ? <video controls playsInline src={videoSrc} /> : <img className="lesson-fallback" src="/404.jpg" alt="Video unavailable for this chapter" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />; })()}
+                        <div className="lesson-empty-note">The video for this chapter has not been added yet.</div>
+                      </div>
+                      <aside className="lesson-details"><span className="lesson-eyebrow">NOW LEARNING</span><h2>{selectedChapter.title}</h2><p>Follow the lesson at your own pace. Your video will appear here once its source is connected.</p><button type="button" className="btn-brown" onClick={() => setSelectedChapter(null)}>All Chapters <span>→</span></button></aside>
+                    </div>
+                  </section>
+                )}
+
+                {!selectedCourseId && !selectedChapter && !addOpen && !addClosing && (
                   <div
                     className={
                       coursesContentReady
@@ -3091,8 +3250,29 @@ export default function DashboardPage() {
                               <article
                                 key={course.id}
                                 className={`course-card ${courseDeleteMode && selected ? "course-card-selected" : ""}`}
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => {
-                                  if (courseDeleteMode) toggleCourseSelection(course.id);
+                                  if (courseDeleteMode) {
+                                    toggleCourseSelection(course.id);
+                                    return;
+                                  }
+
+                                  setSelectedCourseId(course.id);
+                                  setSelectedChapter(null);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+
+                                    if (courseDeleteMode) {
+                                      toggleCourseSelection(course.id);
+                                      return;
+                                    }
+
+                                    setSelectedCourseId(course.id);
+                                    setSelectedChapter(null);
+                                  }
                                 }}
                               >
                                 <div className="course-card-top">
@@ -3140,7 +3320,7 @@ export default function DashboardPage() {
                                     {course.stream || course.class}
                                   </span>
 
-                                  {courseDeleteMode ? (
+                                  {courseDeleteMode && (
                                     <button
                                       type="button"
                                       className={`course-open-btn ${selected ? "selected" : ""}`}
@@ -3150,19 +3330,6 @@ export default function DashboardPage() {
                                       }}
                                     >
                                       {selected ? "Selected ✓" : "Select"}
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className="course-open-btn"
-                                      onClick={() =>
-                                        showToast(
-                                          "This Feature will be added in MARK3 Update",
-                                          "error",
-                                        )
-                                      }
-                                    >
-                                      Open →
                                     </button>
                                   )}
                                 </div>
@@ -7292,4 +7459,40 @@ body{
   }
 }
 
+
+
+/* MARK 3 — course chapters, video lesson and responsive topic summaries */
+.lm .overall-course-name{display:block;color:#5c5b58!important;font-weight:600;margin-top:4px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm .continue-course .hero-info{min-width:0;flex:1}
+.lm .mark3-topic-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lm .topic-result{display:flex;flex-direction:column;gap:7px;padding-top:14px}
+.lm .topic-result b{font-size:16px;color:var(--text)}
+.lm .topic-result span{font-size:13px;color:var(--muted)}
+.lm .topic-result strong{font-size:13px;color:var(--brown)}
+.lm .chapter-page,.lm .lesson-page{padding-bottom:36px}
+.lm .back-link{border:0;background:transparent;color:var(--text-2);font:inherit;font-size:13px;padding:0 0 14px;cursor:pointer;transition:transform .22s cubic-bezier(.2,.8,.2,1),opacity .22s}
+.lm .back-link:hover{opacity:.72;transform:translateX(-2px)}
+.lm .chapter-list{display:flex;flex-direction:column;gap:30px;margin-top:26px}
+.lm .chapter-group h2{font-size:17px;font-weight:650;margin:0 0 14px;color:var(--text)}
+.lm .chapter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lm .chapter-card{display:flex;align-items:center;gap:14px;text-align:left;width:100%;min-height:84px;padding:17px;border:1px solid var(--border-soft);border-radius:16px;background:var(--card);color:var(--text);cursor:pointer;box-shadow:0 3px 12px rgba(74,30,0,.025);transition:transform .24s cubic-bezier(.2,.8,.2,1),box-shadow .24s,border-color .24s}
+.lm .chapter-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(74,30,0,.08);border-color:var(--cream)}
+.lm .chapter-card:active{transform:scale(.985)}
+.lm .chapter-number{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:12px;background:var(--icon-bg);color:var(--brown);font-size:13px;font-weight:700}
+.lm .chapter-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:6px}
+.lm .chapter-copy b{font-size:14px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.lm .chapter-copy small{font-size:12px;color:var(--muted)}
+.lm .chapter-arrow{font-size:20px;color:var(--muted)}
+.lm .lesson-layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(240px,.8fr);gap:24px;margin-top:22px;align-items:start}
+.lm .lesson-player{min-width:0;border-radius:20px;overflow:hidden;background:#1b1712;box-shadow:0 14px 42px rgba(45,25,8,.12);aspect-ratio:16/9;position:relative;display:flex;align-items:center;justify-content:center}
+.lm .lesson-player video,.lm .lesson-fallback{display:block;width:100%;height:100%;object-fit:contain}
+.lm .lesson-fallback{object-fit:cover}
+.lm .lesson-empty-note{position:absolute;bottom:0;left:0;right:0;padding:12px 16px;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:12px}
+.lm .lesson-details{padding:24px 4px;display:flex;flex-direction:column;align-items:flex-start;gap:14px}
+.lm .lesson-eyebrow{font-size:10px;letter-spacing:.14em;font-weight:700;color:var(--muted)}
+.lm .lesson-details h2{font-size:22px;line-height:1.3;margin:0;color:var(--text)}
+.lm .lesson-details p{font-size:14px;line-height:1.7;color:var(--muted);margin:0 0 8px}
+.lm .lesson-details .btn-brown{display:inline-flex;align-items:center;gap:10px}
+@media(max-width:760px){.lm .chapter-grid{grid-template-columns:1fr}.lm .lesson-layout{grid-template-columns:1fr;gap:10px}.lm .lesson-details{padding:14px 2px}.lm .mark3-topic-grid{grid-template-columns:1fr}.lm .continue-course{flex-wrap:wrap}.lm .continue-course .btn-cream{width:100%;justify-content:center}}
+@media(prefers-reduced-motion:reduce){.lm .chapter-card,.lm .back-link{transition:none!important}}
 `;

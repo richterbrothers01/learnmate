@@ -2476,27 +2476,120 @@ export default function DashboardPage() {
     }
   };
 
-  /* Mark 3 weekly study timer. Counts only while a lesson/course view is open. */
+  /* Mark 3 weekly study timer. Supabase is the source of truth across browsers. */
   useEffect(() => {
-    const readCurrentWeek = () => {
-      try { setWeeklyStudySeconds(Number(localStorage.getItem(`learnmate-study-time:${getWeekStart()}`) || 0)); }
-      catch { setWeeklyStudySeconds(0); }
+    let mounted = true;
+    let timer: number | undefined;
+    let refreshTimer: number | undefined;
+    let userId: string | null = null;
+    let weekStart = getWeekStart();
+    let baseSeconds = 0;
+    let pendingSeconds = 0;
+    let flushing = false;
+
+    const loadWeekTotal = async () => {
+      if (!userId) return;
+      const currentWeekStart = getWeekStart();
+      const today = getLocalDateString(new Date());
+
+      const { data, error } = await supabase
+        .from("study_time_logs")
+        .select("activity_date,seconds_studied")
+        .eq("user_id", userId)
+        .gte("activity_date", currentWeekStart)
+        .lte("activity_date", today);
+
+      if (error) {
+        console.error("Could not load weekly study time:", error);
+        return;
+      }
+
+      if (!mounted) return;
+      weekStart = currentWeekStart;
+      baseSeconds = (data || []).reduce(
+        (total, row) => total + Math.max(0, Number(row.seconds_studied) || 0),
+        0,
+      );
+      setWeeklyStudySeconds(baseSeconds + pendingSeconds);
     };
-    readCurrentWeek();
-    const active = activeSection === "courses" && Boolean(selectedCourseId);
-    if (!active) return;
-    const timer = window.setInterval(() => {
-      const key = `learnmate-study-time:${getWeekStart()}`;
-      setWeeklyStudySeconds(() => {
-        let next = 1;
-        try {
-          next = Number(localStorage.getItem(key) || 0) + 1;
-          localStorage.setItem(key, String(next));
-        } catch { }
-        return next;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
+
+    const flushPending = async () => {
+      if (!userId || pendingSeconds <= 0 || flushing) return;
+
+      const secondsToSave = pendingSeconds;
+      const activityDate = getLocalDateString(new Date());
+      flushing = true;
+
+      try {
+        const { error } = await supabase.rpc("increment_study_time", {
+          p_activity_date: activityDate,
+          p_seconds: secondsToSave,
+        });
+
+        if (error) {
+          console.error("Could not save study time:", error);
+          return;
+        }
+
+        pendingSeconds = Math.max(0, pendingSeconds - secondsToSave);
+        await loadWeekTotal();
+      } finally {
+        flushing = false;
+      }
+    };
+
+    const start = async () => {
+      const { data: { user: authUser }, error } = await supabase.auth.getUser();
+
+      if (error) console.error("Could not identify user for study time:", error);
+      if (!mounted || !authUser) return;
+
+      userId = authUser.id;
+      await loadWeekTotal();
+
+      const active = activeSection === "courses" && Boolean(selectedCourseId);
+      if (!active || !mounted) return;
+
+      timer = window.setInterval(() => {
+        const currentWeekStart = getWeekStart();
+
+        // The displayed total rolls over automatically when Monday begins.
+        if (currentWeekStart !== weekStart) {
+          weekStart = currentWeekStart;
+          baseSeconds = 0;
+          pendingSeconds = 0;
+          setWeeklyStudySeconds(0);
+          void loadWeekTotal();
+        }
+
+        pendingSeconds += 1;
+        setWeeklyStudySeconds(baseSeconds + pendingSeconds);
+
+        if (pendingSeconds >= 15) void flushPending();
+      }, 1000);
+
+      // Pick up study time logged from another browser/device while this page is open.
+      refreshTimer = window.setInterval(() => {
+        void loadWeekTotal();
+      }, 30000);
+
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") void flushPending();
+    };
+
+    void start();
+
+    return () => {
+      mounted = false;
+      if (timer !== undefined) window.clearInterval(timer);
+      if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      // Best-effort save for time accumulated just before leaving the course.
+      void flushPending();
+    };
   }, [activeSection, selectedCourseId]);
 
   useEffect(() => {

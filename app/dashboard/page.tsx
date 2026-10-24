@@ -275,26 +275,26 @@ function getStreakMeta(days: number): StreakMeta {
       emoji: "🐢",
       title: `${days} days`,
       sub: "Slow and steady",
-      gif: "public/turtle.gif",
+      gif: "/turtle.gif",
     };
   }
 
   if (days === 4) {
     return {
       key: "bolt",
-      emoji: "⚡",
+      emoji: "",
       title: "4 days",
       sub: "Charged up!",
-      gif: "public/bolt.gif",
+      gif: "/bolt.gif",
     };
   }
 
   return {
     key: "fire",
-    emoji: "🔥",
+    emoji: "",
     title: `${days} days`,
     sub: "On fire — keep it up!",
-    gif: "public/fire.gif",
+    gif: "/fire.gif",
   };
 }
 

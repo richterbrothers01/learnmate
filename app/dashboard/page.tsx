@@ -5,6 +5,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 
 import { createClient } from "../../lib/supabase/client";
@@ -509,6 +511,400 @@ function ProgressRing({
   );
 }
 
+/* ==========================================================
+   MARK 5 — LEARNMATE AI (DOUBT CLEARER)
+   Types, backend connection point and message renderer.
+========================================================== */
+
+type AiRole = "user" | "assistant";
+
+type AiMessage = {
+  id: string;
+  role: AiRole;
+  content: string;
+  failed?: boolean;
+};
+
+type AiChatSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+};
+
+const AI_HEADING = "Enhance your learning.";
+const AI_HISTORY_LIMIT = 60;
+
+/* ----------------------------------------------------------
+   BACKEND CONNECTION POINT (the only place that talks to
+   the Doubt Clearer API route).
+
+   POST /api/doubt-clearer   (same-origin, cookie session)
+   Request : { question: string, chatId: string | null }
+   Response: { answer: string, chatId: string }
+
+   Response keys are read tolerantly (answer / reply /
+   response / message / text and chatId / chat_id /
+   conversationId / conversation_id). If your route uses
+   other names or a different request body, change ONLY
+   requestAiAnswer below.
+---------------------------------------------------------- */
+const AI_API_ENDPOINT = "/api/doubt-clearer";
+
+class AiRequestError extends Error {
+  status: number;
+
+  constructor(status: number, message?: string) {
+    super(message ?? `LearnMate AI request failed (${status})`);
+    this.name = "AiRequestError";
+    this.status = status;
+  }
+}
+
+function aiPickString(source: unknown, keys: string[]): string | null {
+  if (!source || typeof source !== "object") return null;
+  const record = source as Record<string, unknown>;
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+
+  return null;
+}
+
+async function requestAiAnswer(
+  question: string,
+  chatId: string | null,
+): Promise<{ answer: string; chatId: string | null }> {
+  const response = await fetch(AI_API_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, chatId }),
+  });
+
+  if (!response.ok) throw new AiRequestError(response.status);
+
+  let data: unknown = null;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new AiRequestError(502, "LearnMate AI returned an unreadable response");
+  }
+
+  const answer = aiPickString(data, [
+    "answer",
+    "reply",
+    "response",
+    "message",
+    "text",
+  ]);
+
+  if (!answer) {
+    throw new AiRequestError(502, "LearnMate AI returned an empty response");
+  }
+
+  return {
+    answer,
+    chatId: aiPickString(data, [
+      "chatId",
+      "chat_id",
+      "conversationId",
+      "conversation_id",
+    ]),
+  };
+}
+
+function aiFriendlyError(error: unknown): string {
+  if (error instanceof AiRequestError) {
+    if (error.status === 401 || error.status === 403) {
+      return "Your session may have expired. Refresh the page and sign in again.";
+    }
+
+    if (error.status === 429) {
+      return "LearnMate AI is getting a lot of questions right now. Please wait a moment and try again.";
+    }
+  }
+
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return "You appear to be offline. Check your connection and try again.";
+  }
+
+  return "LearnMate AI could not answer that just now. Please try again.";
+}
+
+function aiNewId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+}
+
+/* ---- Lightweight, dependency-free markdown renderer ----
+   Produces React elements only (never raw HTML), so model
+   output cannot inject markup into the page. */
+
+const AI_UL = /^\s*[-*•]\s+/;
+const AI_OL = /^\s*\d+[.)]\s+/;
+const AI_FENCE = /^\s*```/;
+const AI_MD_HEADING = /^\s{0,3}(#{1,4})\s+(.*)$/;
+const AI_RULE = /^\s*([-*_])\1{2,}\s*$/;
+const AI_QUOTE = /^\s*>\s?/;
+const AI_TABLE_SEP =
+  /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+function startsAiBlock(line: string, next?: string): boolean {
+  return (
+    AI_FENCE.test(line) ||
+    AI_MD_HEADING.test(line) ||
+    AI_RULE.test(line) ||
+    AI_UL.test(line) ||
+    AI_OL.test(line) ||
+    AI_QUOTE.test(line) ||
+    (line.trim().startsWith("|") &&
+      next !== undefined &&
+      AI_TABLE_SEP.test(next))
+  );
+}
+
+function splitAiTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function renderAiInline(text: string, keyPrefix: string): ReactNode[] {
+  const parts = text.split(
+    /(\*\*[^*\n]+\*\*|`[^`\n]+`|\*[^*\s][^*\n]*\*)/g,
+  );
+
+  return parts.map((part, index) => {
+    if (!part) return null;
+
+    const key = `${keyPrefix}-${index}`;
+
+    if (part.length > 4 && part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={key}>{part.slice(2, -2)}</strong>;
+    }
+
+    if (part.length > 2 && part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={key} className="ai-inline-code">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    if (part.length > 2 && part.startsWith("*") && part.endsWith("*")) {
+      return <em key={key}>{part.slice(1, -1)}</em>;
+    }
+
+    return part;
+  });
+}
+
+function renderAiMarkdown(source: string): ReactNode[] {
+  const lines = source.replace(/\r\n?/g, "\n").split("\n");
+  const blocks: ReactNode[] = [];
+  let i = 0;
+  let counter = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (!line.trim()) {
+      i += 1;
+      continue;
+    }
+
+    const key = `b${counter}`;
+    counter += 1;
+
+    // Fenced code block
+    if (AI_FENCE.test(line)) {
+      const code: string[] = [];
+      i += 1;
+
+      while (i < lines.length && !AI_FENCE.test(lines[i])) {
+        code.push(lines[i]);
+        i += 1;
+      }
+
+      i += 1;
+
+      blocks.push(
+        <pre key={key} className="ai-code" tabIndex={0}>
+          <code>{code.join("\n")}</code>
+        </pre>,
+      );
+      continue;
+    }
+
+    // Heading
+    const heading = line.match(AI_MD_HEADING);
+
+    if (heading) {
+      blocks.push(
+        <h3 key={key} className="ai-md-heading">
+          {renderAiInline(heading[2], key)}
+        </h3>,
+      );
+      i += 1;
+      continue;
+    }
+
+    // Horizontal rule
+    if (AI_RULE.test(line)) {
+      blocks.push(<hr key={key} className="ai-md-rule" />);
+      i += 1;
+      continue;
+    }
+
+    // Table
+    if (
+      line.trim().startsWith("|") &&
+      i + 1 < lines.length &&
+      AI_TABLE_SEP.test(lines[i + 1])
+    ) {
+      const head = splitAiTableRow(line);
+      const rows: string[][] = [];
+      i += 2;
+
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        rows.push(splitAiTableRow(lines[i]));
+        i += 1;
+      }
+
+      blocks.push(
+        <div key={key} className="ai-table-wrap">
+          <table className="ai-table">
+            <thead>
+              <tr>
+                {head.map((cell, n) => (
+                  <th key={n}>{renderAiInline(cell, `${key}-h${n}`)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, r) => (
+                <tr key={r}>
+                  {row.map((cell, n) => (
+                    <td key={n}>
+                      {renderAiInline(cell, `${key}-${r}-${n}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
+
+    // Blockquote
+    if (AI_QUOTE.test(line)) {
+      const quote: string[] = [];
+
+      while (i < lines.length && AI_QUOTE.test(lines[i])) {
+        quote.push(lines[i].replace(AI_QUOTE, ""));
+        i += 1;
+      }
+
+      blocks.push(
+        <blockquote key={key} className="ai-md-quote">
+          {quote.map((text, n) => (
+            <span key={n}>
+              {n > 0 && <br />}
+              {renderAiInline(text, `${key}-${n}`)}
+            </span>
+          ))}
+        </blockquote>,
+      );
+      continue;
+    }
+
+    // Lists
+    if (AI_UL.test(line) || AI_OL.test(line)) {
+      const ordered = AI_OL.test(line);
+      const pattern = ordered ? AI_OL : AI_UL;
+      const startMatch = line.match(/^\s*(\d+)/);
+      const start = ordered && startMatch ? Number(startMatch[1]) : 1;
+      const items: string[] = [];
+
+      while (i < lines.length && pattern.test(lines[i])) {
+        let item = lines[i].replace(pattern, "");
+        i += 1;
+
+        while (
+          i < lines.length &&
+          lines[i].trim() &&
+          /^\s{2,}\S/.test(lines[i]) &&
+          !AI_UL.test(lines[i]) &&
+          !AI_OL.test(lines[i])
+        ) {
+          item += ` ${lines[i].trim()}`;
+          i += 1;
+        }
+
+        items.push(item);
+
+        // Allow a blank line between items of the same list.
+        let peek = i;
+        while (peek < lines.length && !lines[peek].trim()) peek += 1;
+        if (peek > i && peek < lines.length && pattern.test(lines[peek])) {
+          i = peek;
+        }
+      }
+
+      const listItems = items.map((item, n) => (
+        <li key={n}>{renderAiInline(item, `${key}-${n}`)}</li>
+      ));
+
+      blocks.push(
+        ordered ? (
+          <ol key={key} className="ai-md-list" start={start}>
+            {listItems}
+          </ol>
+        ) : (
+          <ul key={key} className="ai-md-list">
+            {listItems}
+          </ul>
+        ),
+      );
+      continue;
+    }
+
+    // Paragraph
+    const paragraph: string[] = [line];
+    i += 1;
+
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !startsAiBlock(lines[i], lines[i + 1])
+    ) {
+      paragraph.push(lines[i]);
+      i += 1;
+    }
+
+    blocks.push(
+      <p key={key} className="ai-md-p">
+        {paragraph.map((text, n) => (
+          <span key={n}>
+            {n > 0 && <br />}
+            {renderAiInline(text.trim(), `${key}-${n}`)}
+          </span>
+        ))}
+      </p>,
+    );
+  }
+
+  return blocks;
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<User>(FALLBACK_USER);
   const [notifs] = useState<Notif[]>(MOCK_NOTIFS);
@@ -584,7 +980,7 @@ export default function DashboardPage() {
   ========================================================== */
 
   const [activeSection, setActiveSection] =
-    useState<"dashboard" | "courses">(
+    useState<"dashboard" | "courses" | "ai">(
       "dashboard",
     );
 
@@ -640,6 +1036,44 @@ export default function DashboardPage() {
   const [nextTestDate, setNextTestDate] = useState<string | null>(null);
 
 
+  /* ==========================================================
+     MARK 5 — LEARNMATE AI (DOUBT CLEARER) STATE
+  ========================================================== */
+
+  const [aiChats, setAiChats] = useState<AiChatSummary[]>([]);
+  const [aiHistoryLoading, setAiHistoryLoading] = useState(true);
+  const [aiHistoryError, setAiHistoryError] = useState(false);
+
+  const [aiActiveChatId, setAiActiveChatId] = useState<string | null>(null);
+  const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+  const [aiMessagesLoading, setAiMessagesLoading] = useState(false);
+  const [aiMessagesError, setAiMessagesError] = useState(false);
+
+  const [aiDraft, setAiDraft] = useState("");
+  const [aiSending, setAiSending] = useState(false);
+  const [aiGlowLive, setAiGlowLive] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const [aiCompact, setAiCompact] = useState(false);
+  const [aiHistoryCollapsed, setAiHistoryCollapsed] = useState(false);
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+  const [aiReducedMotion, setAiReducedMotion] = useState(false);
+  const [aiShowJump, setAiShowJump] = useState(false);
+
+  // Incremented whenever the active conversation changes, so a slow
+  // response can never be written into a different conversation.
+  const aiSessionRef = useRef(0);
+  const aiActiveChatIdRef = useRef<string | null>(null);
+  const aiSendingRef = useRef(false);
+  const aiChatsRequestRef = useRef(0);
+  const aiScrollRef = useRef<HTMLDivElement>(null);
+  const aiTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const aiStickRef = useRef(true);
+  const aiPendingScrollRef = useRef<
+    "instant" | "bottom" | "assistant" | null
+  >(null);
+
+
   useEffect(() => {
     const savedSection =
       sessionStorage.getItem(
@@ -648,6 +1082,8 @@ export default function DashboardPage() {
 
     if (savedSection === "courses") {
       setActiveSection("courses");
+    } else if (savedSection === "ai") {
+      setActiveSection("ai");
     } else {
       setActiveSection("dashboard");
     }
@@ -2268,6 +2704,19 @@ export default function DashboardPage() {
       return;
     }
 
+    if (label === "Doubt Clearer") {
+      setActiveSection("ai");
+      setAddOpen(false);
+      setAddClosing(false);
+
+      sessionStorage.setItem(
+        "learnmate-active-section",
+        "ai",
+      );
+
+      return;
+    }
+
     showToast(
       "This Feature will be added in MARK3 Update",
       "error",
@@ -2605,6 +3054,429 @@ export default function DashboardPage() {
   }, []);
 
   /* ==========================================================
+     MARK 5 — LEARNMATE AI (DOUBT CLEARER) LOGIC
+  ========================================================== */
+
+  const aiSetActiveChat = (id: string | null) => {
+    aiActiveChatIdRef.current = id;
+    setAiActiveChatId(id);
+  };
+
+  const aiFocusComposer = () => {
+    if (typeof window === "undefined") return;
+
+    // Avoid popping the on-screen keyboard on touch devices.
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      return;
+    }
+
+    window.setTimeout(() => aiTextareaRef.current?.focus(), 80);
+  };
+
+  /* ---- History (reads through the existing Supabase client;
+          row-level security on ai_chats enforces ownership) ---- */
+
+  const aiLoadChats = async (silent = false) => {
+    aiChatsRequestRef.current += 1;
+    const requestId = aiChatsRequestRef.current;
+
+    if (!silent) {
+      setAiHistoryLoading(true);
+      setAiHistoryError(false);
+    }
+
+    try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+
+      if (!authUser) throw new Error("No authenticated user");
+
+      const { data, error } = await supabase
+        .from("ai_chats")
+        .select("id, title, updated_at, created_at")
+        .eq("user_id", authUser.id)
+        .order("updated_at", { ascending: false })
+        .limit(AI_HISTORY_LIMIT);
+
+      if (error) throw error;
+      if (requestId !== aiChatsRequestRef.current) return;
+
+      const rows = (data ?? []) as Array<{
+        id: string;
+        title: string | null;
+        updated_at: string | null;
+        created_at: string | null;
+      }>;
+
+      setAiChats(
+        rows.map((row) => ({
+          id: row.id,
+          title: row.title?.trim() || "New conversation",
+          updatedAt: row.updated_at ?? row.created_at ?? "",
+        })),
+      );
+      setAiHistoryError(false);
+    } catch (error) {
+      console.error("LearnMate AI: could not load chat history", error);
+
+      if (requestId === aiChatsRequestRef.current && !silent) {
+        setAiHistoryError(true);
+      }
+    } finally {
+      if (requestId === aiChatsRequestRef.current) {
+        setAiHistoryLoading(false);
+      }
+    }
+  };
+
+  const aiLoadMessages = async (chatId: string, session: number) => {
+    setAiMessagesLoading(true);
+    setAiMessagesError(false);
+
+    try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+
+      if (!authUser) throw new Error("No authenticated user");
+
+      const { data, error } = await supabase
+        .from("ai_chat_messages")
+        .select("id, role, content, created_at")
+        .eq("chat_id", chatId)
+        .eq("user_id", authUser.id)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      if (session !== aiSessionRef.current) return;
+
+      const rows = (data ?? []) as Array<{
+        id: string;
+        role: string;
+        content: string | null;
+        created_at: string | null;
+      }>;
+
+      const mapped = rows.map((row) => ({
+        id: row.id,
+        role: (row.role === "user" ? "user" : "assistant") as AiRole,
+        content: row.content ?? "",
+        time: row.created_at ? Date.parse(row.created_at) || 0 : 0,
+      }));
+
+      // Question and answer can share a timestamp; keep the question first.
+      mapped.sort(
+        (a, b) =>
+          a.time - b.time ||
+          (a.role === b.role ? 0 : a.role === "user" ? -1 : 1),
+      );
+
+      aiPendingScrollRef.current = "instant";
+      aiStickRef.current = true;
+      setAiMessages(
+        mapped.map(({ id, role, content }) => ({ id, role, content })),
+      );
+    } catch (error) {
+      console.error("LearnMate AI: could not load conversation", error);
+
+      if (session !== aiSessionRef.current) return;
+      setAiMessagesError(true);
+    } finally {
+      if (session === aiSessionRef.current) setAiMessagesLoading(false);
+    }
+  };
+
+  /* ---- Conversation actions ---- */
+
+  const aiStartNewChat = () => {
+    aiSessionRef.current += 1;
+    aiSendingRef.current = false;
+
+    aiSetActiveChat(null);
+    setAiMessages([]);
+    setAiMessagesLoading(false);
+    setAiMessagesError(false);
+    setAiError(null);
+    setAiSending(false);
+    setAiShowJump(false);
+    setAiDrawerOpen(false);
+    aiStickRef.current = true;
+
+    aiFocusComposer();
+  };
+
+  const aiOpenChat = (chatId: string) => {
+    if (chatId === aiActiveChatIdRef.current && !aiMessagesError) {
+      setAiDrawerOpen(false);
+      return;
+    }
+
+    aiSessionRef.current += 1;
+    const session = aiSessionRef.current;
+
+    aiSendingRef.current = false;
+    setAiSending(false);
+    setAiError(null);
+    setAiShowJump(false);
+    setAiMessages([]);
+    aiSetActiveChat(chatId);
+    setAiDrawerOpen(false);
+
+    void aiLoadMessages(chatId, session);
+    aiFocusComposer();
+  };
+
+  const aiSubmit = async (retryText?: string, retryId?: string) => {
+    const question = (retryText ?? aiDraft).trim();
+
+    if (!question || aiSendingRef.current) return;
+
+    const session = aiSessionRef.current;
+    const chatIdAtSend = aiActiveChatIdRef.current;
+    const messageId = retryId ?? aiNewId("user");
+
+    aiSendingRef.current = true;
+    setAiSending(true);
+    setAiError(null);
+    aiPendingScrollRef.current = "bottom";
+    aiStickRef.current = true;
+
+    if (retryId) {
+      setAiMessages((prev) =>
+        prev.map((m) => (m.id === retryId ? { ...m, failed: false } : m)),
+      );
+    } else {
+      setAiMessages((prev) => [
+        ...prev,
+        { id: messageId, role: "user", content: question },
+      ]);
+      setAiDraft("");
+    }
+
+    try {
+      const result = await requestAiAnswer(question, chatIdAtSend);
+
+      if (session !== aiSessionRef.current) {
+        // The student moved to another conversation; do not show this
+        // answer here, just refresh the history so the chat appears.
+        void aiLoadChats(true);
+        return;
+      }
+
+      if (result.chatId) aiSetActiveChat(result.chatId);
+
+      aiPendingScrollRef.current = "assistant";
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          id: aiNewId("assistant"),
+          role: "assistant",
+          content: result.answer,
+        },
+      ]);
+
+      void aiLoadChats(true);
+    } catch (error) {
+      console.error("LearnMate AI: request failed", error);
+
+      if (session !== aiSessionRef.current) return;
+
+      setAiMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, failed: true } : m)),
+      );
+      setAiError(aiFriendlyError(error));
+    } finally {
+      if (session === aiSessionRef.current) {
+        aiSendingRef.current = false;
+        setAiSending(false);
+      }
+    }
+  };
+
+  const aiRetry = () => {
+    const failed = [...aiMessages]
+      .reverse()
+      .find((m) => m.role === "user" && m.failed);
+
+    if (failed) void aiSubmit(failed.content, failed.id);
+  };
+
+  const aiHandleKeyDown = (
+    event: ReactKeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      void aiSubmit();
+    }
+  };
+
+  const aiCopyMessage = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      showToast("Copied to clipboard", "success");
+    } catch {
+      showToast("Could not copy. Please select the text and copy it.", "error");
+    }
+  };
+
+  const aiToggleHistory = () => {
+    if (aiCompact) {
+      setAiDrawerOpen((open) => !open);
+    } else {
+      setAiHistoryCollapsed((collapsed) => !collapsed);
+    }
+  };
+
+  const aiHandleScroll = () => {
+    const el = aiScrollRef.current;
+    if (!el) return;
+
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distance < 120;
+    aiStickRef.current = nearBottom;
+
+    const showJump = !nearBottom && el.scrollHeight > el.clientHeight + 200;
+    setAiShowJump((prev) => (prev === showJump ? prev : showJump));
+  };
+
+  const aiJumpToLatest = () => {
+    const el = aiScrollRef.current;
+    if (!el) return;
+
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: aiReducedMotion ? "auto" : "smooth",
+    });
+  };
+
+  /* ---- Derived values ---- */
+
+  const aiHistoryVisible = aiCompact ? aiDrawerOpen : !aiHistoryCollapsed;
+
+  const aiShowWelcome =
+    !aiActiveChatId &&
+    aiMessages.length === 0 &&
+    !aiSending &&
+    !aiMessagesLoading;
+
+  const aiTypedHeading = useTypewriter(
+    AI_HEADING,
+    55,
+    activeSection === "ai" && aiShowWelcome && !aiReducedMotion,
+  );
+
+  /* ---- Effects ---- */
+
+  // Reduced-motion and compact-layout detection.
+  useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const compact = window.matchMedia("(max-width: 1100px)");
+
+    const sync = () => {
+      setAiReducedMotion(motion.matches);
+      setAiCompact(compact.matches);
+    };
+
+    sync();
+    motion.addEventListener("change", sync);
+    compact.addEventListener("change", sync);
+
+    return () => {
+      motion.removeEventListener("change", sync);
+      compact.removeEventListener("change", sync);
+    };
+  }, []);
+
+  // Load history each time the student opens Doubt Clearer.
+  useEffect(() => {
+    if (activeSection !== "ai") return;
+
+    void aiLoadChats();
+    aiFocusComposer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection]);
+
+  // Keep the glow animating until its fade-out has finished.
+  useEffect(() => {
+    if (aiSending) {
+      setAiGlowLive(true);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setAiGlowLive(false), 800);
+    return () => window.clearTimeout(timer);
+  }, [aiSending]);
+
+  // Grow the composer with its content (up to a cap).
+  useEffect(() => {
+    const el = aiTextareaRef.current;
+    if (!el) return;
+
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [aiDraft, activeSection, aiShowWelcome]);
+
+  // Scroll behaviour: jump to the question, then to the start of the
+  // answer, without yanking a student who is reading further up.
+  useEffect(() => {
+    if (activeSection !== "ai") return;
+
+    const behavior: ScrollBehavior = aiReducedMotion ? "auto" : "smooth";
+    const lastId = aiMessages[aiMessages.length - 1]?.id;
+
+    const frame = window.requestAnimationFrame(() => {
+      const mode = aiPendingScrollRef.current;
+      aiPendingScrollRef.current = null;
+
+      const el = aiScrollRef.current;
+      if (!el) return;
+
+      if (mode === "instant") {
+        el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      } else if (mode === "assistant" && lastId) {
+        const node = el.querySelector<HTMLElement>(
+          `[data-ai-msg-id="${lastId}"]`,
+        );
+
+        if (node) {
+          el.scrollTo({
+            top: Math.max(node.offsetTop - 12, 0),
+            behavior,
+          });
+        }
+      } else if (mode === "bottom" || aiStickRef.current) {
+        el.scrollTo({ top: el.scrollHeight, behavior });
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    aiMessages,
+    aiSending,
+    aiError,
+    aiMessagesLoading,
+    activeSection,
+    aiReducedMotion,
+  ]);
+
+  // Escape closes the history drawer.
+  useEffect(() => {
+    if (!aiDrawerOpen) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAiDrawerOpen(false);
+    };
+
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [aiDrawerOpen]);
+
+  /* ==========================================================
      DISPLAY
   ========================================================== */
 
@@ -2702,7 +3574,11 @@ export default function DashboardPage() {
                   (activeSection ===
                     "courses" &&
                     item.label ===
-                    "My Courses");
+                    "My Courses") ||
+                  (activeSection ===
+                    "ai" &&
+                    item.label ===
+                    "Doubt Clearer");
                 return (
                   <button
                     key={item.label}
@@ -2792,7 +3668,7 @@ export default function DashboardPage() {
             </div>
           </aside>
 
-          <main className="main">
+          <main className={activeSection === "ai" ? "main ai-mode" : "main"}>
             {/* TOPBAR */}
 
             <div className="topbar reveal">
@@ -3207,6 +4083,465 @@ export default function DashboardPage() {
                   </div>
                 </>
               )}
+
+            {/* ==================================================
+                MARK 5 — LEARNMATE AI (DOUBT CLEARER)
+            ================================================== */}
+
+            {activeSection === "ai" && (
+              <section
+                className={`ai-workspace${aiHistoryVisible && !aiCompact ? " has-history" : ""
+                  }`}
+                aria-label="LearnMate AI"
+              >
+                {aiCompact && aiDrawerOpen && (
+                  <div
+                    className="ai-history-scrim"
+                    onClick={() => setAiDrawerOpen(false)}
+                    aria-hidden="true"
+                  />
+                )}
+
+                {/* Previous conversations */}
+
+                <aside
+                  className={`ai-history${aiCompact ? " ai-history--drawer" : ""
+                    }${aiHistoryVisible ? " is-visible" : ""}`}
+                  aria-label="Previous conversations"
+                  aria-hidden={!aiHistoryVisible}
+                >
+                  <div className="ai-history-head">
+                    <h2 className="ai-history-title">Chats</h2>
+
+                    {aiCompact && (
+                      <button
+                        type="button"
+                        className="ai-icon-btn"
+                        aria-label="Close chat history"
+                        onClick={() => setAiDrawerOpen(false)}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          width="18"
+                          height="18"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="ai-history-body">
+                    {aiHistoryLoading ? (
+                      <div aria-label="Loading conversations" role="status">
+                        <span className="ai-skeleton" />
+                        <span className="ai-skeleton" />
+                        <span className="ai-skeleton" />
+                        <span className="ai-skeleton" />
+                      </div>
+                    ) : aiHistoryError ? (
+                      <div className="ai-history-note" role="alert">
+                        Could not load your conversations.
+                        <br />
+                        <button
+                          type="button"
+                          className="ai-link-btn"
+                          onClick={() => void aiLoadChats()}
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    ) : aiChats.length === 0 ? (
+                      <p className="ai-history-note">
+                        No conversations yet. Questions you ask will appear
+                        here.
+                      </p>
+                    ) : (
+                      <ul className="ai-history-list" role="list">
+                        {aiChats.map((chat) => {
+                          const isActive = chat.id === aiActiveChatId;
+
+                          return (
+                            <li key={chat.id}>
+                              <button
+                                type="button"
+                                className={
+                                  isActive
+                                    ? "ai-history-item is-active"
+                                    : "ai-history-item"
+                                }
+                                aria-current={isActive ? "true" : undefined}
+                                title={chat.title}
+                                onClick={() => aiOpenChat(chat.id)}
+                              >
+                                <span className="ai-history-item-title">
+                                  {chat.title}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </aside>
+
+                {/* Conversation */}
+
+                <div className="ai-chat-pane">
+                  <div className="ai-chat-head">
+                    <button
+                      type="button"
+                      className="ai-icon-btn"
+                      onClick={aiToggleHistory}
+                      aria-label={
+                        aiHistoryVisible
+                          ? "Hide chat history"
+                          : "Show chat history"
+                      }
+                      aria-expanded={aiHistoryVisible}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <rect x="3" y="4" width="18" height="16" rx="3" />
+                        <path d="M9 4v16" />
+                      </svg>
+                    </button>
+
+                    <span className="ai-chat-name">LearnMate AI</span>
+
+                    <button
+                      type="button"
+                      className="ai-new-chat"
+                      aria-label="New chat"
+                      onClick={aiStartNewChat}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="16"
+                        height="16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                      <span>New chat</span>
+                    </button>
+                  </div>
+
+                  <div
+                    className={`ai-chat${aiShowWelcome ? " is-welcome" : ""}`}
+                  >
+                    <div
+                      className="ai-scroll"
+                      ref={aiScrollRef}
+                      onScroll={aiHandleScroll}
+                    >
+                      {aiShowWelcome ? (
+                        <div className="ai-welcome">
+                          <h1 className="ai-title" aria-label={AI_HEADING}>
+                            <span className="ai-title-ghost" aria-hidden="true">
+                              {AI_HEADING}
+                            </span>
+
+                            <span className="ai-title-live" aria-hidden="true">
+                              {aiTypedHeading}
+
+                              {aiTypedHeading.length < AI_HEADING.length && (
+                                <span className="type-cursor">|</span>
+                              )}
+                            </span>
+                          </h1>
+
+                          <p className="ai-welcome-sub">
+                            LearnMate AI helps you understand concepts and
+                            clear your doubts, one step at a time.
+                          </p>
+                        </div>
+                      ) : (
+                        <div
+                          className="ai-thread"
+                          role="log"
+                          aria-label="Conversation with LearnMate AI"
+                        >
+                          {aiMessagesLoading && (
+                            <div
+                              className="ai-thread-loading"
+                              role="status"
+                              aria-label="Loading conversation"
+                            >
+                              <span className="ai-skeleton ai-skeleton--right" />
+                              <span className="ai-skeleton ai-skeleton--wide" />
+                              <span className="ai-skeleton ai-skeleton--mid" />
+                            </div>
+                          )}
+
+                          {aiMessagesError && (
+                            <div className="ai-msg">
+                              <div className="ai-error" role="alert">
+                                <span>
+                                  This conversation could not be loaded.
+                                </span>
+
+                                <button
+                                  type="button"
+                                  className="ai-retry"
+                                  onClick={() => {
+                                    const id = aiActiveChatIdRef.current;
+                                    if (!id) return;
+                                    aiSessionRef.current += 1;
+                                    void aiLoadMessages(
+                                      id,
+                                      aiSessionRef.current,
+                                    );
+                                  }}
+                                >
+                                  Try again
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {aiMessages.map((message) =>
+                            message.role === "user" ? (
+                              <div
+                                key={message.id}
+                                className="ai-msg ai-msg--user"
+                                data-ai-msg-id={message.id}
+                              >
+                                <div className="ai-user-wrap">
+                                  <div
+                                    className={
+                                      message.failed
+                                        ? "ai-bubble is-failed"
+                                        : "ai-bubble"
+                                    }
+                                  >
+                                    {message.content}
+                                  </div>
+
+                                  {message.failed && (
+                                    <span className="ai-not-sent">
+                                      Not sent
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div
+                                key={message.id}
+                                className="ai-msg ai-msg--assistant"
+                                data-ai-msg-id={message.id}
+                              >
+                                <span className="ai-avatar" aria-hidden="true">
+                                    🤖
+                                </span>
+
+                                <div className="ai-msg-body">
+                                  <div className="ai-prose">
+                                    {renderAiMarkdown(message.content)}
+                                  </div>
+
+                                  <div className="ai-msg-actions">
+                                    <button
+                                      type="button"
+                                      className="ai-copy"
+                                      onClick={() =>
+                                        void aiCopyMessage(message.content)
+                                      }
+                                      aria-label="Copy answer"
+                                    >
+                                      <svg
+                                        viewBox="0 0 24 24"
+                                        width="15"
+                                        height="15"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.9"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        aria-hidden="true"
+                                      >
+                                        <rect
+                                          x="9"
+                                          y="9"
+                                          width="11"
+                                          height="11"
+                                          rx="2.5"
+                                        />
+                                        <path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15" />
+                                      </svg>
+                                      <span>Copy</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ),
+                          )}
+
+                          {aiSending && (
+                            <div
+                              className="ai-msg ai-msg--assistant"
+                              role="status"
+                              aria-label="LearnMate AI is thinking"
+                            >
+                              <span
+                                className="ai-avatar ai-avatar--pulse"
+                                aria-hidden="true"
+                              >
+                                ✦
+                              </span>
+
+                              <span className="ai-dots" aria-hidden="true">
+                                <span />
+                                <span />
+                                <span />
+                              </span>
+                            </div>
+                          )}
+
+                          {aiError && !aiSending && (
+                            <div className="ai-msg">
+                              <div className="ai-error" role="alert">
+                                <span>{aiError}</span>
+
+                                <button
+                                  type="button"
+                                  className="ai-retry"
+                                  onClick={aiRetry}
+                                >
+                                  Try again
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Composer */}
+
+                    <div className="ai-dock">
+                      {!aiShowWelcome && aiShowJump && (
+                        <button
+                          type="button"
+                          className="ai-jump"
+                          onClick={aiJumpToLatest}
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            width="15"
+                            height="15"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M12 5v14M5 12l7 7 7-7" />
+                          </svg>
+                          Latest
+                        </button>
+                      )}
+
+                      <form
+                        className="ai-composer-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void aiSubmit();
+                        }}
+                      >
+                        <div
+                          className={`ai-composer-shell${aiGlowLive ? " is-live" : ""
+                            }${aiSending ? " is-busy" : ""}`}
+                        >
+                          <span className="ai-glow" aria-hidden="true" />
+                          <span className="ai-ring" aria-hidden="true" />
+
+                          <div className="ai-composer">
+                            <textarea
+                              ref={aiTextareaRef}
+                              className="ai-input"
+                              rows={1}
+                              value={aiDraft}
+                              onChange={(event) =>
+                                setAiDraft(event.target.value)
+                              }
+                              onKeyDown={aiHandleKeyDown}
+                              placeholder="Ask LearnMate AI"
+                              aria-label="Message LearnMate AI"
+                              aria-busy={aiSending}
+                              enterKeyHint="send"
+                            />
+
+                            <button
+                              type="submit"
+                              className={
+                                aiSending ? "ai-send is-busy" : "ai-send"
+                              }
+                              aria-label={
+                                aiSending
+                                  ? "LearnMate AI is responding"
+                                  : "Send message"
+                              }
+                              disabled={aiSending || !aiDraft.trim()}
+                            >
+                              {aiSending ? (
+                                <span
+                                  className="ai-spinner"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  width="20"
+                                  height="20"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.4"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <path d="M12 19V5M5 12l7-7 7 7" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        <p className="ai-footnote">
+                          LearnMate AI can make mistakes. Double-check
+                          important answers.
+                        </p>
+                      </form>
+                    </div>
+
+                    <div className="ai-chat-spacer" aria-hidden="true" />
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* ==================================================
                 MY COURSES
@@ -7588,4 +8923,994 @@ body{
 .lm .lesson-details .btn-brown{display:inline-flex;align-items:center;gap:10px}
 @media(max-width:760px){.lm .chapter-grid{grid-template-columns:1fr}.lm .lesson-layout{grid-template-columns:1fr;gap:10px}.lm .lesson-details{padding:14px 2px}.lm .mark3-topic-grid{grid-template-columns:1fr}.lm .continue-course{flex-wrap:wrap}.lm .continue-course .btn-cream{width:100%;justify-content:center}}
 @media(prefers-reduced-motion:reduce){.lm .chapter-card,.lm .back-link{transition:none!important}}
+
+/* ==========================================================
+   MARK 5 — LEARNMATE AI (DOUBT CLEARER)
+   Everything below is namespaced with ai- and only applies
+   inside the new workspace.
+========================================================== */
+
+.lm .main.ai-mode{
+  height:100vh;
+  height:100dvh;
+  display:flex;
+  flex-direction:column;
+  padding-bottom:16px;
+  overflow:hidden
+}
+
+.lm .main.ai-mode > .topbar{
+  flex-shrink:0
+}
+
+.lm .ai-workspace{
+  --ai-user-bg:#F3E3C3;
+  position:relative;
+  flex:1;
+  min-height:0;
+  margin-top:8px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr);
+  gap:18px
+}
+
+.lm .ai-workspace.has-history{
+  grid-template-columns:252px minmax(0,1fr)
+}
+
+[data-theme="dark"] .lm .ai-workspace{
+  --ai-user-bg:#3A2512
+}
+
+/* ---------- History ---------- */
+
+.lm .ai-history{
+  display:none;
+  flex-direction:column;
+  min-height:0;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:20px;
+  box-shadow:var(--shadow);
+  overflow:hidden
+}
+
+.lm .ai-history.is-visible{
+  display:flex
+}
+
+.lm .ai-history--drawer{
+  display:flex;
+  position:absolute;
+  z-index:6;
+  top:0;
+  bottom:0;
+  left:0;
+  width:min(300px,86%);
+  visibility:hidden;
+  transform:translateX(-104%);
+  transition:transform .3s cubic-bezier(.2,.8,.2,1),visibility 0s linear .3s;
+  box-shadow:0 18px 50px rgba(40,22,8,.28)
+}
+
+.lm .ai-history--drawer.is-visible{
+  visibility:visible;
+  transform:none;
+  transition:transform .3s cubic-bezier(.2,.8,.2,1),visibility 0s
+}
+
+.lm .ai-history-scrim{
+  position:absolute;
+  inset:0;
+  z-index:5;
+  border-radius:20px;
+  background:rgba(40,22,8,.34);
+  animation:aiFadeIn .2s ease both
+}
+
+.lm .ai-history-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  min-height:48px;
+  padding:10px 12px 4px 18px;
+  flex-shrink:0
+}
+
+.lm .ai-history-title{
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--muted)
+}
+
+.lm .ai-history-body{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:4px 8px 12px
+}
+
+.lm .ai-history-list{
+  list-style:none;
+  display:flex;
+  flex-direction:column;
+  gap:2px
+}
+
+.lm .ai-history-item{
+  display:block;
+  width:100%;
+  min-height:40px;
+  text-align:left;
+  padding:9px 12px;
+  border-radius:12px;
+  font-size:14px;
+  line-height:1.35;
+  color:var(--text-2);
+  transition:background-color .2s ease,color .2s ease
+}
+
+.lm .ai-history-item-title{
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  overflow-wrap:anywhere
+}
+
+.lm .ai-history-item:hover{
+  background:var(--icon-bg);
+  color:var(--text)
+}
+
+.lm .ai-history-item.is-active{
+  background:var(--cream-soft);
+  color:var(--brown-900);
+  font-weight:600
+}
+
+[data-theme="dark"] .lm .ai-history-item.is-active{
+  background:#35220F;
+  color:var(--text)
+}
+
+.lm .ai-history-note{
+  padding:16px 12px;
+  font-size:13.5px;
+  line-height:1.55;
+  color:var(--muted);
+  text-align:center
+}
+
+.lm .ai-link-btn{
+  margin-top:10px;
+  height:34px;
+  min-height:34px;
+  padding:0 16px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  color:var(--brown);
+  font-size:13.5px;
+  font-weight:600;
+  transition:background-color .2s ease,border-color .2s ease
+}
+
+.lm .ai-link-btn:hover{
+  background:var(--icon-bg)
+}
+
+[data-theme="dark"] .lm .ai-link-btn{
+  color:var(--cream)
+}
+
+.lm .ai-skeleton{
+  display:block;
+  height:38px;
+  margin:6px 4px;
+  border-radius:12px;
+  background:linear-gradient(90deg,var(--icon-bg),var(--border-soft),var(--icon-bg));
+  background-size:200% 100%;
+  animation:aiShimmer 1.4s linear infinite
+}
+
+.lm .ai-skeleton--right{
+  width:46%;
+  margin-left:auto;
+  height:44px;
+  border-radius:20px
+}
+
+.lm .ai-skeleton--wide{
+  width:100%;
+  height:92px;
+  border-radius:16px
+}
+
+.lm .ai-skeleton--mid{
+  width:68%;
+  height:22px
+}
+
+/* ---------- Chat pane ---------- */
+
+.lm .ai-chat-pane{
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column
+}
+
+.lm .ai-chat-head{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:0 2px 10px;
+  flex-shrink:0
+}
+
+.lm .ai-chat-name{
+  font-size:15px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  color:var(--text)
+}
+
+.lm .ai-icon-btn{
+  width:38px;
+  height:38px;
+  min-height:38px;
+  display:grid;
+  place-items:center;
+  border-radius:12px;
+  color:var(--text-2);
+  transition:background-color .2s ease,color .2s ease
+}
+
+.lm .ai-icon-btn:hover{
+  background:var(--icon-bg);
+  color:var(--text)
+}
+
+.lm .ai-new-chat{
+  margin-left:auto;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  height:38px;
+  min-height:38px;
+  padding:0 16px 0 13px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--brown);
+  font-size:14px;
+  font-weight:600;
+  transition:background-color .2s ease,border-color .2s ease,transform .2s ease
+}
+
+.lm .ai-new-chat:hover{
+  background:var(--icon-bg);
+  transform:translateY(-1px)
+}
+
+[data-theme="dark"] .lm .ai-new-chat{
+  color:var(--cream)
+}
+
+.lm .ai-icon-btn:focus-visible,
+.lm .ai-new-chat:focus-visible,
+.lm .ai-history-item:focus-visible,
+.lm .ai-copy:focus-visible,
+.lm .ai-retry:focus-visible,
+.lm .ai-link-btn:focus-visible,
+.lm .ai-jump:focus-visible,
+.lm .ai-send:focus-visible,
+.lm .ai-code:focus-visible{
+  outline:2px solid var(--brown);
+  outline-offset:2px
+}
+
+[data-theme="dark"] .lm .ai-icon-btn:focus-visible,
+[data-theme="dark"] .lm .ai-new-chat:focus-visible,
+[data-theme="dark"] .lm .ai-history-item:focus-visible,
+[data-theme="dark"] .lm .ai-copy:focus-visible,
+[data-theme="dark"] .lm .ai-retry:focus-visible,
+[data-theme="dark"] .lm .ai-link-btn:focus-visible,
+[data-theme="dark"] .lm .ai-jump:focus-visible,
+[data-theme="dark"] .lm .ai-send:focus-visible,
+[data-theme="dark"] .lm .ai-code:focus-visible{
+  outline-color:var(--cream)
+}
+
+/* Rows: [messages][composer][spacer]. The spacer collapses once a
+   conversation starts, which slides the composer down to the bottom. */
+
+.lm .ai-chat{
+  flex:1;
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:1fr auto 0fr;
+  transition:grid-template-rows .6s cubic-bezier(.22,.8,.24,1)
+}
+
+.lm .ai-chat.is-welcome{
+  grid-template-rows:1fr auto 1fr
+}
+
+.lm .ai-chat-spacer{
+  min-height:0
+}
+
+.lm .ai-scroll{
+  position:relative;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch
+}
+
+.lm .ai-chat.is-welcome .ai-scroll{
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  overflow:hidden
+}
+
+/* ---------- Welcome ---------- */
+
+.lm .ai-welcome{
+  width:100%;
+  max-width:768px;
+  margin:0 auto;
+  padding:0 8px 28px;
+  animation:aiWelcomeIn .65s cubic-bezier(.2,.8,.2,1) both
+}
+
+.lm .ai-title{
+  position:relative;
+  display:block;
+  font-size:clamp(30px,4.6vw,46px);
+  font-weight:700;
+  letter-spacing:-.03em;
+  line-height:1.14;
+  color:var(--text)
+}
+
+.lm .ai-title-ghost{
+  display:block;
+  visibility:hidden
+}
+
+.lm .ai-title-live{
+  position:absolute;
+  inset:0;
+  display:block
+}
+
+.lm .ai-welcome-sub{
+  margin-top:14px;
+  max-width:520px;
+  font-size:16px;
+  line-height:1.6;
+  color:var(--text-2)
+}
+
+/* ---------- Thread ---------- */
+
+.lm .ai-thread{
+  width:100%;
+  max-width:768px;
+  margin:0 auto;
+  padding:10px 6px 30px;
+  display:flex;
+  flex-direction:column;
+  gap:26px
+}
+
+.lm .ai-thread-loading{
+  display:flex;
+  flex-direction:column;
+  gap:12px
+}
+
+.lm .ai-msg{
+  display:flex;
+  gap:14px;
+  animation:aiMsgIn .4s cubic-bezier(.2,.8,.2,1) both
+}
+
+.lm .ai-msg--user{
+  justify-content:flex-end
+}
+
+.lm .ai-user-wrap{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:6px;
+  max-width:84%
+}
+
+.lm .ai-bubble{
+  padding:12px 18px;
+  border-radius:22px 22px 6px 22px;
+  background:var(--ai-user-bg);
+  color:var(--text);
+  font-size:15.5px;
+  line-height:1.6;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere
+}
+
+.lm .ai-bubble.is-failed{
+  outline:1px solid rgba(217,45,32,.45)
+}
+
+.lm .ai-not-sent{
+  font-size:12.5px;
+  color:var(--red)
+}
+
+.lm .ai-avatar{
+  flex:0 0 32px;
+  width:32px;
+  height:32px;
+  margin-top:2px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:var(--brown);
+  color:var(--cream-soft);
+  font-size:15px;
+  line-height:1
+}
+
+[data-theme="dark"] .lm .ai-avatar{
+  background:var(--cream);
+  color:var(--brown-900)
+}
+
+.lm .ai-avatar--pulse{
+  animation:aiAvatarPulse 1.6s ease-in-out infinite
+}
+
+.lm .ai-msg-body{
+  flex:1;
+  min-width:0
+}
+
+.lm .ai-prose{
+  font-size:16px;
+  line-height:1.75;
+  color:var(--text);
+  overflow-wrap:anywhere
+}
+
+.lm .ai-prose > * + *{
+  margin-top:14px
+}
+
+.lm .ai-prose > .ai-md-heading{
+  margin-top:24px;
+  font-size:18px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  line-height:1.4
+}
+
+.lm .ai-md-list{
+  padding-left:24px;
+  display:flex;
+  flex-direction:column;
+  gap:6px
+}
+
+.lm .ai-md-list li::marker{
+  color:var(--brown)
+}
+
+[data-theme="dark"] .lm .ai-md-list li::marker{
+  color:var(--cream)
+}
+
+.lm .ai-md-quote{
+  padding-left:14px;
+  border-left:3px solid var(--border);
+  color:var(--text-2)
+}
+
+.lm .ai-md-rule{
+  border:0;
+  border-top:1px solid var(--border)
+}
+
+.lm .ai-inline-code{
+  padding:2px 6px;
+  border-radius:6px;
+  background:var(--icon-bg);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.9em
+}
+
+.lm .ai-code{
+  padding:14px 16px;
+  border-radius:14px;
+  background:#2A1A0C;
+  color:#F6E8D0;
+  overflow-x:auto;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:13.5px;
+  line-height:1.65;
+  white-space:pre
+}
+
+.lm .ai-table-wrap{
+  overflow-x:auto;
+  border:1px solid var(--border);
+  border-radius:14px
+}
+
+.lm .ai-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14.5px;
+  line-height:1.55
+}
+
+.lm .ai-table th,
+.lm .ai-table td{
+  padding:10px 14px;
+  text-align:left;
+  vertical-align:top;
+  border-bottom:1px solid var(--border-soft)
+}
+
+.lm .ai-table th{
+  background:var(--icon-bg);
+  font-weight:700
+}
+
+.lm .ai-table tr:last-child td{
+  border-bottom:0
+}
+
+.lm .ai-msg-actions{
+  display:flex;
+  gap:4px;
+  margin-top:8px
+}
+
+.lm .ai-copy{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  height:32px;
+  min-height:32px;
+  padding:0 11px;
+  border-radius:999px;
+  font-size:13px;
+  color:var(--muted);
+  transition:background-color .2s ease,color .2s ease
+}
+
+.lm .ai-copy:hover{
+  background:var(--icon-bg);
+  color:var(--text)
+}
+
+.lm .ai-dots{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  height:32px
+}
+
+.lm .ai-dots span{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--brown);
+  opacity:.3;
+  animation:aiDot 1.2s ease-in-out infinite
+}
+
+[data-theme="dark"] .lm .ai-dots span{
+  background:var(--cream)
+}
+
+.lm .ai-dots span:nth-child(2){animation-delay:.15s}
+.lm .ai-dots span:nth-child(3){animation-delay:.3s}
+
+.lm .ai-error{
+  flex:1;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px 14px;
+  padding:12px 16px;
+  border-radius:16px;
+  background:rgba(217,45,32,.07);
+  border:1px solid rgba(217,45,32,.3);
+  font-size:14.5px;
+  line-height:1.5;
+  color:var(--text)
+}
+
+.lm .ai-retry{
+  margin-left:auto;
+  height:34px;
+  min-height:34px;
+  padding:0 16px;
+  border-radius:999px;
+  background:var(--brown);
+  color:var(--cream-soft);
+  font-size:13.5px;
+  font-weight:600;
+  transition:background-color .2s ease,transform .2s ease
+}
+
+.lm .ai-retry:hover{
+  transform:translateY(-1px)
+}
+
+[data-theme="dark"] .lm .ai-retry{
+  background:var(--cream);
+  color:var(--brown-900)
+}
+
+/* ---------- Composer ---------- */
+
+.lm .ai-dock{
+  position:relative;
+  width:100%;
+  max-width:768px;
+  margin:0 auto;
+  padding:0 4px
+}
+
+.lm .ai-jump{
+  position:absolute;
+  z-index:3;
+  left:50%;
+  top:-52px;
+  transform:translateX(-50%);
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  height:38px;
+  min-height:38px;
+  padding:0 16px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:var(--card);
+  box-shadow:var(--shadow);
+  font-size:13.5px;
+  color:var(--text-2);
+  animation:aiFadeIn .2s ease both
+}
+
+.lm .ai-composer-shell{
+  position:relative;
+  isolation:isolate;
+  border-radius:28px
+}
+
+.lm .ai-glow,
+.lm .ai-ring{
+  position:absolute;
+  overflow:hidden;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .55s ease
+}
+
+.lm .ai-glow{
+  inset:-3px;
+  border-radius:34px;
+  z-index:-2;
+  filter:blur(13px)
+}
+
+.lm .ai-ring{
+  inset:-1.5px;
+  border-radius:30px;
+  z-index:-1
+}
+
+.lm .ai-glow::before,
+.lm .ai-ring::before{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:200%;
+  aspect-ratio:1 / 1;
+  transform:translate(-50%,-50%) rotate(0deg);
+  background:conic-gradient(from 0deg,#4285F4,#34A853,#FBBC05,#EA4335,#4285F4);
+  animation:aiRingSpin 3.4s linear infinite;
+  animation-play-state:paused
+}
+
+.lm .ai-composer-shell.is-live .ai-glow::before,
+.lm .ai-composer-shell.is-live .ai-ring::before{
+  animation-play-state:running
+}
+
+.lm .ai-composer-shell.is-busy .ai-ring{
+  opacity:1
+}
+
+.lm .ai-composer-shell.is-busy .ai-glow{
+  opacity:.6;
+  animation:aiGlowBreathe 1.9s ease-in-out infinite
+}
+
+[data-theme="dark"] .lm .ai-composer-shell.is-busy .ai-glow{
+  opacity:.36
+}
+
+[data-theme="dark"] .lm .ai-composer-shell.is-busy .ai-ring{
+  opacity:.85
+}
+
+.lm .ai-composer{
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:flex-end;
+  gap:10px;
+  padding:10px 10px 10px 22px;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:28px;
+  box-shadow:0 1px 2px rgba(122,47,0,.05),0 12px 32px rgba(122,47,0,.08);
+  transition:border-color .25s ease,box-shadow .25s ease,background-color .25s ease
+}
+
+[data-theme="dark"] .lm .ai-composer{
+  box-shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.28)
+}
+
+.lm .ai-composer:focus-within{
+  border-color:rgba(122,47,0,.45);
+  box-shadow:0 1px 2px rgba(122,47,0,.06),0 14px 36px rgba(122,47,0,.13)
+}
+
+[data-theme="dark"] .lm .ai-composer:focus-within{
+  border-color:rgba(233,198,137,.45)
+}
+
+.lm .ai-composer-shell.is-busy .ai-composer{
+  border-color:transparent
+}
+
+.lm .ai-input{
+  flex:1;
+  min-width:0;
+  max-height:200px;
+  padding:9px 0;
+  border:0;
+  outline:0;
+  resize:none;
+  overflow-y:auto;
+  background:transparent;
+  color:var(--text);
+  font:inherit;
+  font-size:16px;
+  line-height:1.55
+}
+
+.lm .ai-input::placeholder{
+  color:var(--muted)
+}
+
+.lm .ai-send{
+  flex:0 0 44px;
+  width:44px;
+  height:44px;
+  min-height:44px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:var(--brown);
+  color:#FFF6E4;
+  transition:transform .2s ease,background-color .2s ease,color .2s ease
+}
+
+.lm .ai-send:hover:not(:disabled){
+  background:var(--brown-900);
+  transform:translateY(-1px)
+}
+
+.lm .ai-send:disabled{
+  background:var(--border);
+  color:var(--muted);
+  opacity:1;
+  cursor:not-allowed
+}
+
+.lm .ai-send.is-busy:disabled{
+  background:var(--brown);
+  color:#FFF6E4;
+  cursor:progress
+}
+
+[data-theme="dark"] .lm .ai-send{
+  background:var(--cream);
+  color:var(--brown-900)
+}
+
+[data-theme="dark"] .lm .ai-send:hover:not(:disabled){
+  background:var(--cream-soft)
+}
+
+[data-theme="dark"] .lm .ai-send:disabled{
+  background:var(--border);
+  color:var(--muted)
+}
+
+[data-theme="dark"] .lm .ai-send.is-busy:disabled{
+  background:var(--cream);
+  color:var(--brown-900)
+}
+
+.lm .ai-spinner{
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  border:2.5px solid rgba(255,246,228,.35);
+  border-top-color:#FFF6E4;
+  animation:aiSpin .8s linear infinite
+}
+
+[data-theme="dark"] .lm .ai-spinner{
+  border-color:rgba(74,30,0,.25);
+  border-top-color:var(--brown-900)
+}
+
+.lm .ai-footnote{
+  margin-top:10px;
+  padding-bottom:2px;
+  text-align:center;
+  font-size:12px;
+  line-height:1.4;
+  color:var(--muted)
+}
+
+/* ---------- Motion ---------- */
+
+@keyframes aiFadeIn{
+  from{opacity:0}
+  to{opacity:1}
+}
+
+@keyframes aiMsgIn{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:none}
+}
+
+@keyframes aiWelcomeIn{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:none}
+}
+
+@keyframes aiRingSpin{
+  to{transform:translate(-50%,-50%) rotate(360deg)}
+}
+
+@keyframes aiGlowBreathe{
+  0%,100%{transform:scale(1,1)}
+  50%{transform:scale(1.02,1.2)}
+}
+
+@keyframes aiDot{
+  0%,80%,100%{transform:scale(.7);opacity:.3}
+  40%{transform:scale(1);opacity:.9}
+}
+
+@keyframes aiAvatarPulse{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.1)}
+}
+
+@keyframes aiSpin{
+  to{transform:rotate(360deg)}
+}
+
+@keyframes aiShimmer{
+  to{background-position:-200% 0}
+}
+
+/* ---------- Responsive ---------- */
+
+@media(max-width:860px){
+  .lm .main.ai-mode{
+    padding:12px 12px calc(10px + env(safe-area-inset-bottom))
+  }
+
+  .lm .ai-workspace{
+    margin-top:4px
+  }
+
+  .lm .ai-thread{
+    gap:22px;
+    padding:6px 2px 22px
+  }
+
+  .lm .ai-msg{
+    gap:10px
+  }
+
+  .lm .ai-user-wrap{
+    max-width:90%
+  }
+
+  .lm .ai-avatar{
+    flex-basis:28px;
+    width:28px;
+    height:28px;
+    font-size:13px
+  }
+
+  .lm .ai-prose{
+    font-size:15.5px;
+    line-height:1.7
+  }
+
+  .lm .ai-composer-shell,
+  .lm .ai-composer{
+    border-radius:26px
+  }
+
+  .lm .ai-composer{
+    padding:8px 8px 8px 18px
+  }
+
+  .lm .ai-dock{
+    padding:0 6px
+  }
+
+  .lm .ai-footnote{
+    font-size:11.5px
+  }
+
+  .lm .ai-copy{
+    height:36px;
+    min-height:36px
+  }
+}
+
+@media(max-width:420px){
+  .lm .ai-new-chat span{
+    display:none
+  }
+
+  .lm .ai-new-chat{
+    width:38px;
+    padding:0;
+    justify-content:center
+  }
+}
+
+@media(max-height:560px){
+  .lm .ai-footnote{
+    display:none
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .lm .ai-chat{
+    transition:none
+  }
+
+  .lm .ai-composer-shell.is-busy .ai-glow{
+    animation:none
+  }
+}
 `;

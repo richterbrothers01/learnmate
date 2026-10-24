@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 
+import Link from "next/link";
+
 import { createClient } from "../../lib/supabase/client";
 
 type User = {
@@ -2737,7 +2739,7 @@ export default function DashboardPage() {
   /* ==========================================================
      MARK 2 — ADD COURSE
   ========================================================== */
-  
+
   const openAddCourse = () => {
     setAddClosing(false);
     setAddOpen(true);
@@ -3784,6 +3786,19 @@ export default function DashboardPage() {
                   ›
                 </span>
               </button>
+
+              <nav
+                className="side-legal"
+                aria-label="Legal"
+              >
+                <Link href="/privacy">
+                  Privacy Policy
+                </Link>
+
+                <Link href="/terms">
+                  Terms &amp; Conditions
+                </Link>
+              </nav>
             </div>
           </aside>
 
@@ -4595,7 +4610,7 @@ export default function DashboardPage() {
                                 className="ai-avatar ai-avatar--pulse"
                                 aria-hidden="true"
                               >
-                                  🤖
+                                🤖
                               </span>
 
                               <span className="ai-dots" aria-hidden="true">
@@ -6473,6 +6488,38 @@ body{
 .lm .side-foot button:hover,
 .lm .profile-chip:hover{
   background:rgba(233,198,137,.14)
+}
+
+.lm .side-legal{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  margin-top:2px;
+  padding-top:8px;
+  border-top:1px solid rgba(233,198,137,.12)
+}
+
+.lm .side-legal a{
+  display:flex;
+  align-items:center;
+  min-height:32px;
+  padding:6px 12px;
+  border-radius:10px;
+  color:var(--sidebar-muted);
+  font-size:12.5px;
+  font-weight:500;
+  text-decoration:none
+}
+
+.lm .side-legal a:hover,
+.lm .side-legal a:focus-visible{
+  color:var(--sidebar-text);
+  background:rgba(233,198,137,.1)
+}
+
+.lm .side-legal a:focus-visible{
+  outline:2px solid rgba(233,198,137,.5);
+  outline-offset:-2px
 }
 
 .lm .profile-photo-small{

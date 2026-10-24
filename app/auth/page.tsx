@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { createClient } from "../../lib/supabase/client";
 
 type Mode = "signup" | "signin";
@@ -9,6 +10,7 @@ type SignupMethod = "no-email" | "email";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<Mode>("signup");
+  const [legalConsent, setLegalConsent] = useState(false);
   const [signupMethod, setSignupMethod] =
     useState<SignupMethod>("no-email");
 
@@ -112,7 +114,7 @@ export default function AuthPage() {
     if (recoveryMode) {
       targetTitle =
         recoveryIdentifier &&
-        recoveryIdentifier.includes("@")
+          recoveryIdentifier.includes("@")
           ? "Enter your recovery email address"
           : "Enter your recovery email address";
     }
@@ -309,6 +311,15 @@ export default function AuthPage() {
   async function signUp() {
     if (loading) return;
 
+    if (!legalConsent) {
+      showToast(
+        "Consent required",
+        "Please accept the Privacy Policy and Terms & Conditions to create your account.",
+        "error"
+      );
+      return;
+    }
+
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
 
@@ -450,8 +461,8 @@ export default function AuthPage() {
           const suggestionText =
             suggestions.length > 0
               ? ` Try: ${suggestions
-                  .slice(0, 3)
-                  .join(", ")}.`
+                .slice(0, 3)
+                .join(", ")}.`
               : "";
 
           showToast(
@@ -477,8 +488,8 @@ export default function AuthPage() {
           const suggestionText =
             suggestions.length > 0
               ? ` Try: ${suggestions
-                  .slice(0, 3)
-                  .join(", ")}.`
+                .slice(0, 3)
+                .join(", ")}.`
               : "";
 
           showToast(
@@ -534,7 +545,7 @@ export default function AuthPage() {
             showToast(
               "Unable to create account",
               result.error ||
-                "That LearnMate name could not be registered.",
+              "That LearnMate name could not be registered.",
               "error"
             );
           }
@@ -1208,17 +1219,15 @@ export default function AuthPage() {
 
   return (
     <main
-      className={`auth-page ${
-        darkMode ? "dark-mode" : ""
-      }`}
+      className={`auth-page ${darkMode ? "dark-mode" : ""
+        }`}
     >
       {toast && (
         <div
-          className={`success-toast ${
-            toast.type === "error"
+          className={`success-toast ${toast.type === "error"
               ? "error-toast"
               : ""
-          }`}
+            }`}
         >
           <div className="success-toast-icon">
             {toast.type === "success"
@@ -1325,9 +1334,8 @@ export default function AuthPage() {
           {/* THEME SWITCH */}
 
           <label
-            className={`theme-switch ${
-              darkMode ? "dark" : ""
-            }`}
+            className={`theme-switch ${darkMode ? "dark" : ""
+              }`}
             aria-label="Toggle dark mode"
           >
             <input
@@ -1449,7 +1457,7 @@ export default function AuthPage() {
                   type="button"
                   className={
                     signupMethod ===
-                    "no-email"
+                      "no-email"
                       ? "active"
                       : ""
                   }
@@ -1472,7 +1480,7 @@ export default function AuthPage() {
                   type="button"
                   className={
                     signupMethod ===
-                    "email"
+                      "email"
                       ? "active"
                       : ""
                   }
@@ -1631,7 +1639,7 @@ export default function AuthPage() {
 
                 {mode === "signup" &&
                   signupMethod ===
-                    "no-email" && (
+                  "no-email" && (
                     <div className="field">
                       <label htmlFor="name">
                         LearnMate Name
@@ -1665,49 +1673,49 @@ export default function AuthPage() {
 
                 {(mode === "signin" ||
                   signupMethod ===
-                    "email") && (
-                  <div className="field">
-                    <label htmlFor="email">
-                      {mode === "signin"
-                        ? "Email or Name"
-                        : "Email"}
-                    </label>
+                  "email") && (
+                    <div className="field">
+                      <label htmlFor="email">
+                        {mode === "signin"
+                          ? "Email or Name"
+                          : "Email"}
+                      </label>
 
-                    <div className="input-wrap">
-                      <span className="input-icon">
-                        ✉
-                      </span>
+                      <div className="input-wrap">
+                        <span className="input-icon">
+                          ✉
+                        </span>
 
-                      <input
-                        id="email"
-                        type={
-                          mode ===
-                          "signin"
-                            ? "text"
-                            : "email"
-                        }
-                        placeholder={
-                          mode ===
-                          "signin"
-                            ? "you@example.com or your name"
-                            : "you@example.com"
-                        }
-                        value={email}
-                        onChange={(e) =>
-                          setEmail(
-                            e.target.value
-                          )
-                        }
-                        autoComplete={
-                          mode ===
-                          "signin"
-                            ? "username"
-                            : "email"
-                        }
-                      />
+                        <input
+                          id="email"
+                          type={
+                            mode ===
+                              "signin"
+                              ? "text"
+                              : "email"
+                          }
+                          placeholder={
+                            mode ===
+                              "signin"
+                              ? "you@example.com or your name"
+                              : "you@example.com"
+                          }
+                          value={email}
+                          onChange={(e) =>
+                            setEmail(
+                              e.target.value
+                            )
+                          }
+                          autoComplete={
+                            mode ===
+                              "signin"
+                              ? "username"
+                              : "email"
+                          }
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* =================================================
                     PASSWORD
@@ -1732,7 +1740,7 @@ export default function AuthPage() {
                       }
                       placeholder={
                         mode ===
-                        "signup"
+                          "signup"
                           ? "Create a strong password"
                           : "Enter your password"
                       }
@@ -1745,7 +1753,7 @@ export default function AuthPage() {
                       }
                       autoComplete={
                         mode ===
-                        "signup"
+                          "signup"
                           ? "new-password"
                           : "current-password"
                       }
@@ -1776,7 +1784,7 @@ export default function AuthPage() {
                                 key={bar}
                                 className={
                                   bar <=
-                                  strength.level
+                                    strength.level
                                     ? "filled"
                                     : ""
                                 }
@@ -1856,13 +1864,13 @@ export default function AuthPage() {
                       <p
                         className={
                           password ===
-                          confirmPassword
+                            confirmPassword
                             ? "password-match success"
                             : "password-match error"
                         }
                       >
                         {password ===
-                        confirmPassword
+                          confirmPassword
                           ? "Passwords match"
                           : "Passwords do not match"}
                       </p>
@@ -1890,7 +1898,30 @@ export default function AuthPage() {
                 {/* =================================================
                     MAIN BUTTON
                 ================================================= */}
+                {mode === "signup" && !recoveryMode && (
+                  <div className="legal-consent">
+                    <input
+                      id="legal-consent"
+                      type="checkbox"
+                      checked={legalConsent}
+                      onChange={(event) =>
+                        setLegalConsent(event.target.checked)
+                      }
+                    />
 
+                    <label htmlFor="legal-consent">
+                      I agree to the{" "}
+                      <Link href="/privacy" target="_blank">
+                        Privacy Policy
+                      </Link>{" "}
+                      and{" "}
+                      <Link href="/terms" target="_blank">
+                        Terms &amp; Conditions
+                      </Link>
+                      .
+                    </label>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="primary-button"
@@ -3178,7 +3209,40 @@ export default function AuthPage() {
             transition: none !important;
           }
         }
-      `}</style>
+          
+      .legal-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 18px;
+  color: var(--text-color, inherit);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.legal-consent input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  accent-color: #795c43;
+  cursor: pointer;
+}
+
+.legal-consent label {
+  cursor: pointer;
+}
+
+.legal-consent a {
+  color: #795c43;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-page.dark-mode .legal-consent a {
+  color: #d8b99a;
+}
+`}</style>
     </main>
   );
 }

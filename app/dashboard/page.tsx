@@ -275,7 +275,7 @@ function getStreakMeta(days: number): StreakMeta {
       emoji: "🐢",
       title: `${days} days`,
       sub: "Slow and steady",
-      gif: "/turtle.gif",
+      gif: "public/turtle.gif",
     };
   }
 
@@ -285,7 +285,7 @@ function getStreakMeta(days: number): StreakMeta {
       emoji: "⚡",
       title: "4 days",
       sub: "Charged up!",
-      gif: "/bolt.gif",
+      gif: "public/bolt.gif",
     };
   }
 
@@ -294,7 +294,7 @@ function getStreakMeta(days: number): StreakMeta {
     emoji: "🔥",
     title: `${days} days`,
     sub: "On fire — keep it up!",
-    gif: "/fire.gif",
+    gif: "public/fire.gif",
   };
 }
 

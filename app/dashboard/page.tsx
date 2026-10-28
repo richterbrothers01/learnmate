@@ -12,6 +12,21 @@ import {
 import Link from "next/link";
 
 import { createClient } from "../../lib/supabase/client";
+import { CURRICULUM, type CurriculumChapter } from "../../lib/curriculum";
+import TestTaker from "../../components/learnmate/TestTaker";
+import type {
+  TestAnswer,
+  TestQuestion,
+  TestResult,
+} from "../../components/learnmate/TestTaker";
+import QuizTaker from "../../components/learnmate/QuizTaker";
+import type { QuizGenerateResult } from "../../components/learnmate/QuizTaker";
+import ScheduleTestForm from "../../components/learnmate/ScheduleTestForm";
+import type { Schedule as LmSchedule } from "../../components/learnmate/ScheduleTestForm";
+import MilestonePath from "../../components/learnmate/MilestonePath";
+import TestTypeSelect from "../../components/learnmate/TestTypeSelect";
+import { resolveChapterVideo } from "../../lib/learnmate/resolveVideo";
+import { usePushSubscription } from "../../lib/learnmate/usePushSubscription";
 
 type User = {
   name: string;
@@ -21,9 +36,13 @@ type User = {
 };
 
 type Notif = {
+  id: string;
+  type: string;
   title: string;
   body: string;
   time: string;
+  read: boolean;
+  link: string | null;
 };
 
 type StreakMeta = {
@@ -114,124 +133,8 @@ const STREAM_SUBJECTS: Record<string, string[]> = {
 };
 
 
-type CurriculumChapter = { title: string; section?: string };
 type AnswerStat = { courseTitle: string; chapterTitle: string; correct: number; total: number };
 
-/* Mark 3 curriculum. Video URLs intentionally remain empty until supplied. */
-const CURRICULUM: Record<string, CurriculumChapter[]> = {
-  "1|English": ["Two Little Hands", "Greetings", "Life Around Us", "The Cap-seller and the Monkeys", "A Farm", "Food", "The Food we Eat", "Seasons", "Anandi’s Rainbow"].map(title => ({ title })),
-  "1|Mathematics": ["Finding the Furry Cat!", "What is Long? What is Round?", "Mango Treat", "Making 10", "How Many?", "Vegetable Farm", "Lina’s Family", "Fun with Numbers", "Utsav", "How do I Spend my Day?", "How Many Times?", "How Much Can We Spend?", "So Many Toys"].map(title => ({ title })),
-  "2|English": ["My Bicycle", "Picture Reading", "It Is Fun", "Seeing without Seeing", "Come Back Soon", "Between Home and School", "This Is My Town", "A Show of Clouds", "My Name", "The Crow", "The Smart Monkey", "Little Drops of Water", "We Are All Indians"].map(title => ({ title })),
-  "2|Mathematics": ["A Day at the Beach", "Shapes Around Us", "Fun with Numbers", "Shadow Story (Togalu)", "Playing with Lines", "Decoration for Festival", "Rani’s Gift", "Grouping and Sharing", "Which Season Is It?", "Fun at the Fair", "Data Handling"].map(title => ({ title })),
-  "3|English": ["Colours", "Badal and Moti", "Best Friends", "Out in the Garden", "Talking Toys", "Paper Boat", "The Big Laddoo", "Thank God", "Madhu’s Wish", "Night", "Chanda Mama Counts the Stars", "Chandrayaan"].map(title => ({ title })),
-  "3|Mathematics": ["What’s in a Name?", "Toy Joy", "Double Century", "Vacation with My Nani Maa", "Fun with Shapes", "House of Hundreds– I", "Raksha Bandhan", "Fair Share", "House of Hundreds– II", "Fun at Class Party!", "Filling and Lifting", "Give and Take", "Time Goes On", "The Surajkund Fair"].map(title => ({ title })),
-  "3|EVS": ["Family and Friends", "Going to the Mela", "Celebrating Festivals", "Getting to Know Plants", "Plants and Animals Live Together", "Living in Harmony", "Water—A Precious Gift", "Food We Eat", "Staying Healthy and Happy", "This World of Things", "Making Things", "Taking Charge of Waste"].map(title => ({ title })),
-  "4|English": ["Together We Can", "The Tinkling Bells", "Be Smart, Be Safe", "One Thing at a Time", "The Old Stag", "Braille", "Fit Body, Fit Mind, Fit Nation", "The Lagori Champions", "Hekko", "The Swing", "A Journey to the Magical Mountains", "Maheshwar"].map(title => ({ title })),
-  "4|Mathematics": ["Shapes Around Us", "Hide and Seek", "Pattern Around Us", "Thousands Around Us", "Sharing and Measuring", "Measuring Length", "The Cleanest Village", "Weigh it, Pour it", "Equal Groups", "Elephants, Tigers, and Leopards", "Fun with Symmetry", "Ticking Clocks and Turning Calendar", "The Transport Museum", "Data Handling"].map(title => ({ title })),
-  "4|EVS": ["Living Together", "Exploring Our Neighbourhood", "Nature Trail", "Growing up with Nature", "Food for Health", "Happy and Healthy Living", "How Things Work", "How Things are Made", "Different Lands, Different Lives", "Our Sky"].map(title => ({ title })),
-  "5|English": ["Papa’s Spectacles", "Gone with the Scooter", "The Rainbow", "The Wise Parrot", "The Frog", "What a Tank!", "Gilli Danda", "The Decision of the Panchayat", "Vocation", "Glass Bangles"].map(title => ({ title })),
-  "5|Mathematics": ["We the Travellers—I", "Fractions", "Angles as Turns", "We the Travellers—II", "Far and Near", "The Dairy Farm", "Shapes and Patterns", "Weight and Capacity", "Coconut Farm", "Symmetrical Designs", "Grandmother’s Quilt", "Racing Seconds", "Animal Jumps", "Maps and Locations", "Data Through Pictures"].map(title => ({ title })),
-  "5|EVS": ["Water—The Essence of Life", "Journey of a River", "The Mystery of Food", "Our School—A Happy Place", "Our Vibrant Country", "Some Unique Places", "Energy—How Things Work", "Clothes—How Things are Made", "Rhythms of Nature", "Earth—Our Shared Home"].map(title => ({ title })),
-  "6|Social Science": ["Locating Places on the Earth", "Oceans and Continents", "Landforms and Life", "Timeline and Sources of History", "India, That Is Bharat", "The Beginnings of Indian Civilisation", "India’s Cultural Roots", "Unity in Diversity, or ‘Many in the One’", "Family and Community", "Grassroots Democracy — Part 1: Governance", "Grassroots Democracy — Part 2: Local Government in Rural Areas", "Grassroots Democracy — Part 3: Local Government in Urban Areas", "The Value of Work", "Economic Activities Around Us"].map(title => ({ title })),
-  "6|Science": ["The Wonderful World of Science", "Diversity in the Living World", "Mindful Eating: A Path to a Healthy Body", "Exploring Magnets", "Measurement of Length and Motion", "Materials Around Us", "Temperature and its Measurement", "A Journey through States of Water", "Methods of Separation in Everyday Life", "Living Creatures: Exploring their Characteristics", "Nature’s Treasures", "Beyond Earth"].map(title => ({ title })),
-  "6|Mathematics": ["Patterns in Mathematics", "Lines and Angles", "Number Play", "Data Handling and Presentation", "Prime Time", "Perimeter and Area", "Fractions", "Playing with Constructions", "Symmetry", "The Other Side of Zero"].map(title => ({ title })),
-  "6|English": ["A Bottle of Dew", "The Raven and the Fox", "Rama to the Rescue", "The Unlikely Best Friends", "A Friend’s Prayer", "The Chair", "Neem Baba", "What a Bird Thought", "Spices that Heal Us", "Change of Heart", "The Winner", "Yoga—A Way of Life", "Hamara Bharat—Incredible India!", "The Kites", "Ila Sachani: Embroidering Dreams with her Feet", "National War Memorial"].map(title => ({ title })),
-  "7|Social Science": ["Geographical Diversity of India", "Understanding the Weather", "Climates of India", "New Beginnings: Cities and States", "The Rise of Empires", "The Age of Reorganisation", "The Gupta Era: An Age of Tireless Creativity", "How the Land Becomes Sacred", "From the Rulers to the Ruled: Types of Governments", "The Constitution of India — An Introduction", "From Barter to Money", "Understanding Markets", "The Story of Indian Farming", "India and Her Neighbours", "Empires and Kingdoms: 6th to 10th Centuries", "Turning Tides: 11th and 12th Centuries", "India, a Home to Many", "The State, the Government, and You", "Infrastructure: Engine of India’s Development", "Banks and the Magic of Finance"].map(title => ({ title })),
-  "7|Science": ["The Ever-Evolving World of Science", "Exploring Substances: Acidic, Basic, and Neutral", "Electricity: Circuits and their Components", "The World of Metals and Non-metals", "Changes Around Us: Physical and Chemical", "Adolescence: A Stage of Growth and Change", "Heat Transfer in Nature", "Measurement of Time and Motion", "Life Processes in Animals", "Life Processes in Plants", "Light: Shadows and Reflections", "Earth, Moon, and the Sun"].map(title => ({ title })),
-  "7|Mathematics": ["Large Numbers Around Us", "Arithmetic Expressions", "A Peek Beyond the Point", "Expressions using Letter-Numbers", "Parallel and Intersecting Lines", "Number Play", "A Tale of Three Intersecting Lines", "Working with Fractions", "Geometric Twins", "Operations with Integers", "Finding Common Ground", "Another Peek Beyond the Point", "Connecting the Dots...", "Constructions and Tilings", "Finding the Unknown"].map(title => ({ title })),
-  "7|English": ["The Day the River Spoke", "Try Again", "Three Days to See", "Animals, Birds, and Dr. Dolittle", "A Funny Man", "Say the Right Thing", "My Brother’s Great Invention", "Paper Boats", "North, South, East, West", "The Tunnel", "Travel", "Conquering the Summit", "A Homage to Our Brave Soldiers", "My Dear Soldiers", "Rani Abbakka"].map(title => ({ title })),
-  "8|Social Science": ["Natural Resources and Their Use", "Reshaping India’s Political Map", "The Rise of the Marathas", "The Colonial Era in India", "Universal Franchise and India’s Electoral System", "The Parliamentary System: Legislature and Executive", "Factors of Production", "World Geography: Some Glimpses", "India’s Long Road to Independence", "A Journey Through Indian Architecture", "The Role of the Judiciary in Our Society", "Citizenship: Rights and Duties", "Dynamics of Population", "India’s Urban Landscape", "Cultural Currents: 13th to 17th Centuries"].map(title => ({ title })),
-  "8|Science": ["Exploring the Investigative World of Science", "The Invisible Living World: Beyond Our Naked Eye", "Health: The Ultimate Treasure", "Electricity: Magnetic and Heating Effects", "Exploring Forces", "Pressure, Winds, Storms, and Cyclones", "Particulate Nature of Matter", "Nature of Matter: Elements, Compounds, and Mixtures", "The Amazing World of Solutes, Solvents, and Solutions", "Light: Mirrors and Lenses", "Keeping Time with the Skies", "How Nature Works in Harmony", "Our Home: Earth, a Unique Life Sustaining Planet"].map(title => ({ title })),
-  "8|Mathematics": ["A Square and A Cube", "Power Play", "A Story of Numbers", "Quadrilaterals", "Number Play", "We Distribute, Yet Things Multiply", "Proportional Reasoning-1", "Fractions in Disguise", "The Baudhayana-Pythagoras Theorem", "Proportional Reasoning-2", "Exploring Some Geometric Themes", "Tales by Dots and Lines", "Algebra Play", "Area"].map(title => ({ title })),
-  "8|English": ["The Wit that Won Hearts", "A Concrete Example", "Wisdom Paves the Way", "A Tale of Valour: Major Somnath Sharma and the Battle of Badgam", "Somebody’s Mother", "Verghese Kurien—I Too Had A Dream", "The Case of the Fifth Word", "The Magic Brush of Dreams", "Spectacular Wonders", "The Cherry Tree", "Harvest Hymn", "Waiting for the Rain", "Feathered Friend", "Magnifying Glass", "Bibha Chowdhuri: The Beam of Light that Lit the Path for Women in Indian Science"].map(title => ({ title })),
-  "9|Social Science": [
-    "Understanding Social Science",
-    "Shaping of the Earth’s Surface",
-    "Atmosphere and Climate",
-    "Early Humans and Beginning of Civilisation",
-    "State and Society up to 1000 CE",
-    "Democracy",
-    "Elections",
-    "Building Blocks in Economics: The Problem of Choice",
-    "The Price Puzzle: What Drives the Market",
-    "Ocean and Life",
-    "Life on Earth",
-    "Resistance and Resilience (1000 to 1700 CE)",
-    "Government and Public Policy",
-    "Managing Your Personal Finances",
-    "From Ideas to Startup"
-  ].map(title => ({ title })),
-  "9|Science": ["Exploration: Entering the World of Secondary Science", "Cell: The Building Block of Life", "Tissues in Action", "Describing Motion Around Us", "Exploring Mixtures and their Separation", "How Forces Affect Motion", "Work, Energy, and Simple Machines", "Journey Inside the Atom", "Atomic Foundations of Matter", "Sound Waves: Characteristics and Applications", "Reproduction: How Life Continues", "Patterns in Life: Diversity and Classification", "Earth as a System: Energy, Matter, and Life"].map(title => ({ title })),
-  "9|Mathematics": ["Orienting Yourself: The Use of Coordinates", "Introduction to Linear Polynomials", "The World of Numbers", "Exploring Algebraic Identities", "I’m Up and Down, and Round and Round", "Measuring Space: Perimeter and Area", "The Mathematics of Maybe: Introduction to Probability", "Predicting What Comes Next: Exploring Sequences and Progressions", "Propositions and their Converses", "How Quantities Combine: Understanding Data", "The World of Algorithms", "Quadrilaterals", "Two Variables, One Line", "Math of Space: Surface Area and Volume"].map(title => ({ title })),
-  "9|English": ["How I Taught My Grandmother to Read", "Bharat Our Land", "The Pot Maker", "Gifts of Grace: Honouring Our Vocations", "Winds of Change", "Canvas of Soil", "Vitamin-M", "I Cannot Remember My Mother", "The World of Limitless Possibilities", "Nine Gold Medals", "Twin Melodies", "A Friend Found in Music", "Carrier of Words", "Words", "Follow That Dream", "Believe in Yourself"].map(title => ({ title })),
-  "10|Social Science": ["Resources and Development", "Forest and Wildlife Resources", "Water Resources", "Agriculture", "Minerals and Energy Resources", "Manufacturing Industries", "Lifelines of National Economy", "Development", "Sectors of the Indian Economy", "Money and Credit", "Globalisation and the Indian Economy", "Consumer Rights", "Power-sharing", "Federalism", "Gender, Religion and Caste", "Political Parties", "Outcomes of Democracy", "The Rise of Nationalism in Europe", "Nationalism in India", "The Making of a Global World", "The Age of Industrialisation", "Print Culture and the Modern World"].map(title => ({ title })),
-  "10|Science": ["Chemical Reactions and Equations", "Acids, Bases and Salts", "Metals and Non-metals", "Carbon and its Compounds", "Life Processes", "Control and Coordination", "How do Organisms Reproduce?", "Heredity", "Light – Reflection and Refraction", "The Human Eye and the Colourful World", "Electricity", "Magnetic Effects of Electric Current", "Our Environment"].map(title => ({ title })),
-  "10|Mathematics": ["Real Numbers", "Polynomials", "Pair of Linear Equations in Two Variables", "Quadratic Equations", "Arithmetic Progressions", "Triangles", "Coordinate Geometry", "Introduction to Trigonometry", "Some Applications of Trigonometry", "Circles", "Areas Related to Circles", "Surface Areas and Volumes", "Statistics", "Probability"].map(title => ({ title })),
-  "10|English": [
-    ...["A Letter to God", "Nelson Mandela: Long Walk to Freedom", "Two Stories about Flying", "From the Diary of Anne Frank", "Glimpses of India", "Mijbil the Otter", "Madam Rides the Bus", "The Sermon at Benares", "The Proposal"].map(title => ({ title, section: "Main Literature" })),
-    ...["A Triumph of Surgery", "The Thief’s Story", "The Midnight Visitor", "A Question of Trust", "Footprints without Feet", "The Making of a Scientist", "The Necklace", "Bholi", "The Book That Saved the Earth"].map(title => ({ title, section: "Side Literature" })),
-    ...["A Letter to God", "Nelson Mandela: Long Walk to Freedom", "Two Stories about Flying", "From the Diary of Anne Frank", "Glimpses of India", "Mijbil the Otter", "Madam Rides the Bus", "The Sermon at Benaras", "The Proposal"].map(title => ({ title, section: "Grammar" }))
-  ],
-  "11|English": [
-    ...["The Portrait of a Lady", "A Photograph", "We’re Not Afraid to Die... if We Can All Be Together", "Discovering Tut: the Saga Continues", "The Laburnum Top", "The Voice of the Rain", "The Ailing Planet: the Green Movement’s Role", "Childhood", "The Adventure", "Silk Road", "Father to Son"].map(title => ({ title, section: "Main Literature" })),
-    ...["The Summer of the Beautiful White Horse", "The Address", "Mother’s Day", "Birth", "The Tale of Melon City"].map(title => ({ title, section: "Side Literature" })),
-    ...["Note-making", "Summarising", "Sub-titling", "Essay-writing", "Letter-writing", "Creative Writing"].map(title => ({ title, section: "Writing Skills" }))
-  ],
-  "11|Physics": ["Units and Measurement", "Motion in a Straight Line", "Motion in a Plane", "Laws of Motion", "Work, Energy and Power", "System of Particles and Rotational Motion", "Gravitation", "Mechanical Properties of Solids", "Mechanical Properties of Fluids", "Thermal Properties of Matter", "Thermodynamics", "Kinetic Theory", "Oscillations", "Waves"].map(title => ({ title })),
-  "11|Chemistry": ["Some Basic Concepts of Chemistry", "Structure of Atom", "Classification of Elements and Periodicity in Properties", "Chemical Bonding and Molecular Structure", "Thermodynamics", "Equilibrium", "Redox Reaction", "Organic Chemistry: Some Basic Principles and Techniques", "Hydrocarbons"].map(title => ({ title })),
-  "11|Biology": ["The Living World", "Biological Classification", "Plant Kingdom", "Animal Kingdom", "Morphology of Flowering Plants", "Anatomy of Flowering Plants", "Structural Organization in Animals", "Cell: The Unit of Life", "Biomolecules", "Cell Cycle and Cell Division", "Photosynthesis in Higher Plants", "Respiration in Plants", "Plant Growth and Development", "Breathing and Excretion", "Body Fluids and Circulation", "Excretory Products and Their Elimination", "Locomotion and Movement", "Neural Control and Coordination", "Chemical Coordination and Integration"].map(title => ({ title })),
-  "11|Pure Mathematics": ["Sets", "Relations and Functions", "Trigonometric Functions", "Complex Numbers and Quadratic Equations", "Linear Inequalities", "Permutations and Combinations", "Binomial Theorem", "Sequences and Series", "Straight Lines", "Conic Sections", "Introduction to Three-Dimensional Geometry", "Limits and Derivatives", "Statistics", "Probability"].map(title => ({ title })),
-  "11|Applied Mathematics": ["Prime Number", "Ratio, Proportion, and Logarithms", "Interpretation of Data", "Analysis of Data", "Commercial Mathematics", "Set Theory", "Relation and Function", "Complex Number", "Sequence and Series", "Permutations and Combinations", "Trigonometry"].map(title => ({ title })),
-  "11|Computer Science": ["Computer System", "Encoding Schemes and Number System", "Emerging Trends", "Introduction to Problem Solving", "Getting Started with Python", "Flow of Control", "Functions", "Strings", "List", "Tuples and Dictionaries", "Societal Impact"].map(title => ({ title })),
-  "11|Accountancy": ["Introduction to Accounting", "Theory Base of Accounting", "Recording of Transactions - I", "Recording of Transactions - II", "Bank Reconciliation Statement", "Trial Balance and Rectification of Errors", "Depreciation", "Provisions and Reserves", "Financial Statements 1", "Financial Statements 2"].map(title => ({ title })),
-  "11|Business Studies": ["Business, Commerce, Trade and Commerce", "Forms of Business and Forms of Business Organization", "Private, Public, and Global Enterprises", "Business Services", "Emerging Models of Business", "Social Responsibilities of Business and Business Ethics", "Formation of a Company", "Sources of Business Finance", "MSME and Business Entrepreneurship", "Capsule Clothes and Business Entrepreneurship", "Internal Trade", "International Business"].map(title => ({ title })),
-  "11|Economics": [
-    ...["Introduction", "Collection of Data", "Organization of Data", "Presentation of Data", "Measures of Central Tendency", "Correlation", "Index Number", "Use of Statistical Tools"].map(title => ({ title, section: "Statistics" })),
-    ...["Indian Economy on the Eve of Independence", "Indian Economy, 1950 to 1990", "Liberalisation, Privatisation, and Globalisation: An Appraisal", "Human Capital Formation in India", "Rural Development", "Employment: Growth, Informalization and Other Issues", "Environment and Sustainable Development", "Comparative Development Experiences of India and Its Neighbours"].map(title => ({ title, section: "Main Economics" }))
-  ],
-  "11|History": ["Writing on City Life", "An Empire Across Three Continents", "Nomadic Empires", "The Three Orders", "Changing Cultural Traditions", "Displacing Indigenous People", "Paths to Modernization"].map(title => ({ title })),
-  "11|Political Science": [
-    ...["Constitution: Why and How?", "Rights in the Indian Constitution", "Election and Representation", "Executive", "Legislature", "Judiciary", "Federalism", "Local Government", "Constitution as a Living Document", "The Philosophy of Constitution"].map(title => ({ title, section: "Part A" })),
-    ...["Political Theory: An Introduction", "Freedom", "Equality", "Social Justice", "Rights", "Citizenship", "Nationalism", "Civilisation"].map(title => ({ title, section: "Part B" }))
-  ],
-  "11|Geography": [
-    ...["Geography as a Discipline", "The Origin and Evolution of the Earth", "Interior of the Earth", "Distribution of Oceans and Continents", "Geomorphic Processes", "Landforms and Their Evolution", "Composition and Structure of Atmosphere", "Solar Radiation, Heat Balance, and Temperature", "Atmospheric Circulation and Weather Systems", "Water in the Atmosphere", "World Climate and Climate Change", "Water (Oceans)", "Movement of Ocean Water", "Biodiversity and Conservation"].map(title => ({ title, section: "Book A" })),
-    ...["India — Location", "Structure and Physiography", "Drainage System", "Climate", "Natural Vegetation", "Natural Hazards and Disasters"].map(title => ({ title, section: "Book B" }))
-  ],
-  "11|Sociology": [
-    ...["Sociology and Society", "Terms, Concepts, and Their Use in Sociology", "Understanding Social Institutions", "Culture and Socialisation", "Doing Sociology: Research Methods"].map(title => ({ title, section: "Part 1" })),
-    ...["Social Structure, Stratification, and Social Processes in Society", "Social Change and Social Order in Rural and Urban Society", "Environment and Society", "Introducing Western Sociologists", "Indian Sociologists"].map(title => ({ title, section: "Part 2" }))
-  ],
-  "11|Psychology": ["What Is Psychology?", "Methods of Enquiry in Psychology", "Human Development", "Sensory, Attentional, and Perceptual Processes", "Learning", "Human Memory", "Thinking", "Motivation and Emotion"].map(title => ({ title })),
-  "12|English": [
-    ...["The Last Lesson", "Lost Spring", "Deep Water", "The Rat Trap", "Indigo", "Poets and Pancakes", "The Interview", "Going Places"].map(title => ({ title, section: "Prose" })),
-    ...["My Mother at Sixty-Six", "Keeping Quiet", "A Thing of Beauty", "A Roadside Stand", "Aunt Jennifer’s Tigers"].map(title => ({ title, section: "Poetry" })),
-    ...["The Third Level", "The Tiger King", "Journey to the End of the Earth", "The Enemy", "On the Face of It", "Memories of Childhood"].map(title => ({ title, section: "Supplementary Reader" }))
-  ],
-  "12|Physics": ["Electric Charges and Fields", "Electrostatic Potential and Capacitance", "Current Electricity", "Moving Charges and Magnetism", "Magnetism and Matter", "Electromagnetic Induction", "Alternating Current", "Electromagnetic Waves", "Ray Optics and Optical Instruments", "Wave Optics", "Dual Nature of Radiation and Matter", "Atoms", "Nuclei", "Semiconductor Electronics: Materials, Devices, and Simple Circuits"].map(title => ({ title })),
-  "12|Chemistry": ["Solutions", "Electrochemistry", "Chemical Kinetics", "The D- and F-Block Elements", "Coordination Compounds", "Haloalkanes and Haloarenes", "Alcohols, Phenols, and Ethers", "Aldehydes, Ketones, and Carboxylic Acids", "Amines", "Biomolecules"].map(title => ({ title })),
-  "12|Biology": ["Sexual Reproduction and Flowering Plants", "Human Reproduction", "Reproductive Health", "Principles of Inheritance and Variation", "Molecular Basis of Inheritance", "Evolution", "Human Health and Disease", "Microbes in Human Welfare", "Biotechnology: Principle and Processes", "Biotechnology and Applications", "Organisms and Populations", "Ecosystem", "Biodiversity and Conservation"].map(title => ({ title })),
-  "12|Pure Mathematics": ["Relations and Functions", "Inverse Trigonometric Functions", "Matrices", "Determinants", "Continuity and Differentiability", "Application of Derivatives", "Integrals", "Application of Integrals", "Differential Equation", "Vector Algebra", "Three-Dimensional Geometry", "Linear Programming", "Probability"].map(title => ({ title })),
-  "12|Applied Mathematics": ["Numbers, Quantification, and Numerical Applications", "Algebra", "Differentiation and Its Application", "Integration and Its Applications", "Differential Equations and Modeling", "Probability Distributions", "Inferential Statistics", "Index Numbers and Time-Based Data", "Financial Mathematics", "Linear Programming Problem", "Practical and Project Work"].map(title => ({ title })),
-  "12|Computer Science": ["Exception Handling in Python", "File Handling in Python", "Stack", "Queue", "Sorting", "Searching", "Understanding Data", "Database Concept", "Structured Query Language (SQL)", "Computer Network", "Data Communications", "Security Aspect", "Project-Based Learning"].map(title => ({ title })),
-  "12|Accountancy": ["Accounting for Partnership: Basic Concept", "Reconstitution of a Partnership Firm - Admission of a Partner", "Reconstitution of a Partnership Firm - Retirement/Death of a Partner", "Dissolution of Partnership Firm", "Accounting for Share Capital", "Issue and Redemption of Debentures", "Financial Statements of a Company", "Analysis of Financial Statements", "Accounting Ratios", "Cash Flow Statement"].map(title => ({ title })),
-  "12|Business Studies": ["Nature and Significance of Management", "Principles of Management", "Business Environment", "Planning", "Organising", "Staffing", "Directing", "Controlling", "Financial Management", "Marketing", "Consumer Protection"].map(title => ({ title })),
-  "12|Economics": [
-    ...["Introduction", "Theory of Consumer Behavior", "Production Cost", "The Theory of the Firm under Perfect Competition", "Market Equilibrium"].map(title => ({ title, section: "Microeconomics" })),
-    ...["Introduction", "National Income Accounting", "Money and Banking", "Determination of Income and Employment", "Government Budget and the Economy", "Open Economy Macroeconomics"].map(title => ({ title, section: "Macroeconomics" }))
-  ],
-  "12|History": ["Kings, Farmers, and Towns", "Kinship: Caste and Class", "Thinkers, Beliefs, and Buildings", "Through the Eyes of a Traveler", "Bhakti Sufi Tradition", "An Imperial Capital: Vijayanagara", "Peasants, Zamindars and the State", "Colonialism and the Countryside", "Rebels and the Raj", "Mahatma Gandhi and the Nationalist Movement", "Framing the Constitution"].map(title => ({ title })),
-  "12|Political Science": [
-    ...["The End of Bipolarity", "Contemporary Centres of Power", "Contemporary South Asia", "International Organisations", "Security in the Contemporary World", "Environment and Natural Resources", "Globalisation"].map(title => ({ title, section: "Part A" })),
-    ...["Challenges of Nation Building", "Era of One-Party Dominance", "Politics of Planned Development", "India’s External Relations", "Challenges to and Restoration of the Congress System", "The Crisis of Democratic Order", "Regional Aspirations", "Recent Developments in Indian Politics"].map(title => ({ title, section: "Part B" }))
-  ],
-  "12|Geography": ["Human Geography—Nature and Scope", "The World Population—Distribution, Density and Growth", "Human Development", "Primary Activities", "Secondary Activities", "Tertiary and Quaternary Activities", "Transport and Communication", "International Trade"].map(title => ({ title })),
-  "12|Sociology": [
-    ...["Introducing Indian Society", "The Demographic Structure of Indian Society", "Social Institutions: Continuity and Change", "The Market as a Social Institution", "Patterns of Social Inequality and Exclusion", "The Challenges of Cultural Diversity", "Suggestions for Project Work"].map(title => ({ title, section: "Part 1" })),
-    ...["Structural Change", "Cultural Change", "The Constitution and Social Change", "Change and Development in Rural Society", "Change and Development in Industrial Society", "Globalization and Social Change", "Mass Media and Communications", "Social Movements"].map(title => ({ title, section: "Part 2" }))
-  ],
-  "12|Psychology": ["Variations in Psychological Attributes", "Self and Personality", "Meeting Life Challenges", "Psychological Disorders", "Therapeutic Approaches", "Attitude and Social Cognition", "Social Influence and Group Processes"].map(title => ({ title }))
-};
 
 function getCurriculumKey(course: Course): string {
   const subject = course.subject.trim();
@@ -348,7 +251,6 @@ const NAV_ITEMS = [
   { emoji: "🏠", label: "Dashboard" },
   { emoji: "📚", label: "My Courses" },
   { emoji: "💡", label: "Doubt Clearer" },
-  { emoji: "🧠", label: "Quizzes" },
   { emoji: "📝", label: "Tests" },
   { emoji: "🏆", label: "Milestones" },
   { emoji: "📊", label: "Analytics" },
@@ -909,7 +811,7 @@ function renderAiMarkdown(source: string): ReactNode[] {
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User>(FALLBACK_USER);
-  const [notifs] = useState<Notif[]>(MOCK_NOTIFS);
+  const [notifs, setNotifs] = useState<Notif[]>([]);
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -982,7 +884,14 @@ export default function DashboardPage() {
   ========================================================== */
 
   const [activeSection, setActiveSection] =
-    useState<"dashboard" | "courses" | "ai">(
+    useState<
+      | "dashboard"
+      | "courses"
+      | "ai"
+      | "tests"
+      | "quizzes"
+      | "milestones"
+    >(
       "dashboard",
     );
 
@@ -1091,6 +1000,12 @@ export default function DashboardPage() {
       setActiveSection("courses");
     } else if (savedSection === "ai") {
       setActiveSection("ai");
+    } else if (savedSection === "tests") {
+      setActiveSection("tests");
+    } else if (savedSection === "quizzes") {
+      setActiveSection("quizzes");
+    } else if (savedSection === "milestones") {
+      setActiveSection("milestones");
     } else {
       setActiveSection("dashboard");
     }
@@ -2683,8 +2598,878 @@ export default function DashboardPage() {
   };
 
   /* ==========================================================
-     MARK 2 — NAVIGATION
-  ========================================================== */
+   LEARNMATE TESTS / QUIZZES / MILESTONES — WIRING (2026-10-26)
+   Sections wired to /api/tests, /api/quizzes, /api/schedules and
+   /api/chapters/resolve. Decisions: D1 one test/chapter (30 marks),
+   D2 pass 18, D3 tests in-memory only (TestTaker), D5 scheduling +
+   server expiry, D4 videos later via resolveVideo (null today).
+   ========================================================== */
+
+  type LmApiTest = {
+    id: string;
+    title: string;
+    totalMarks: number;
+    passingMarks: number;
+    durationMinutes: number;
+  };
+
+  type LmResolvedChapter = {
+    templateChapterId: string;
+    test: LmApiTest | null;
+  };
+
+  type LmLoadedTest = {
+    testId: string;
+    testTitle: string;
+    chapterTitle: string;
+    durationMinutes: number;
+    questions: TestQuestion[];
+  };
+
+  const lmApiError = async (res: Response): Promise<string> => {
+    try {
+      const body = await res.json();
+      const message =
+        body?.error?.message ||
+        body?.error ||
+        `Request failed (${res.status}).`;
+      return typeof message === "string"
+        ? message
+        : `Request failed (${res.status}).`;
+    } catch {
+      return `Request failed (${res.status}).`;
+    }
+  };
+
+  const lmResolveChapter = async (
+    course: Course,
+    chapter: CurriculumChapter,
+  ): Promise<LmResolvedChapter> => {
+    const params = new URLSearchParams({
+      classLevel: String(course.classLevel),
+      subject: course.subject,
+      section: chapter.section ?? "",
+      title: chapter.title,
+    });
+    if (course.mathVariant) params.set("mathVariant", course.mathVariant);
+    const res = await fetch(`/api/chapters/resolve?${params.toString()}`);
+    if (!res.ok) throw new Error(await lmApiError(res));
+    return (await res.json()) as LmResolvedChapter;
+  };
+
+  const lmPush = usePushSubscription();
+
+  /* ---------------- Tests section state ---------------- */
+
+  // One view at a time — views never stack or overlap. The list view
+  // (Upcoming / Completed) is the landing screen; the picker only
+  // appears after "+ Add test" is pressed.
+  type LmTestView =
+    | "list"
+    | "pick-course"
+    | "pick-chapter"
+    | "type-select"
+    | "schedule";
+  type LmTestTab = "upcoming" | "completed";
+
+  const [lmTestView, setLmTestView] = useState<LmTestView>("list");
+  const [lmTestTab, setLmTestTab] = useState<LmTestTab>("upcoming");
+  const [lmTestCourseId, setLmTestCourseId] = useState<string>("");
+  const [lmTestChapterIndex, setLmTestChapterIndex] = useState<string>("");
+  const [lmTestResolve, setLmTestResolve] =
+    useState<LmResolvedChapter | null>(null);
+  const [lmTestResolving, setLmTestResolving] = useState(false);
+  const [lmTestError, setLmTestError] = useState<string | null>(null);
+  const [lmTestQuestions, setLmTestQuestions] =
+    useState<LmLoadedTest | null>(null);
+  type LmUpcomingSchedule = {
+    id: string;
+    templateChapterId: string;
+    scheduledAtISO: string;
+    status: string;
+    chapterTitle: string;
+    section: string | null;
+  };
+  type LmCompletedTest = {
+    id: string;
+    chapterTitle: string;
+    section: string | null;
+    score: number;
+    totalMarks: number;
+    passed: boolean;
+    completedAt: string;
+  };
+  const [lmUpcoming, setLmUpcoming] = useState<LmUpcomingSchedule[]>([]);
+  const [lmUpcomingLoading, setLmUpcomingLoading] = useState(false);
+  const [lmCompleted, setLmCompleted] = useState<LmCompletedTest[]>([]);
+  const [lmCompletedLoading, setLmCompletedLoading] = useState(false);
+  const [lmConfirmDeleteAttemptId, setLmConfirmDeleteAttemptId] = useState<string | null>(null);
+  const lmChapterPickedRef = useRef(false);
+
+  const lmRefreshUpcoming = async () => {
+    setLmUpcomingLoading(true);
+    try {
+      const res = await fetch("/api/schedules");
+      if (!res.ok) return;
+      const body = await res.json();
+      const rows = Array.isArray(body?.schedules) ? body.schedules : [];
+      setLmUpcoming(
+        rows.map((s: any) => ({
+          id: String(s.id),
+          templateChapterId: String(s.template_chapter_id),
+          scheduledAtISO: String(s.scheduled_at),
+          status: String(s.status),
+          chapterTitle: String(s.chapter?.title ?? "Untitled chapter"),
+          section: s.chapter?.section ?? null,
+        })),
+      );
+    } catch {
+      /* Keep the previous list; Upcoming is secondary. */
+    } finally {
+      setLmUpcomingLoading(false);
+    }
+  };
+
+  const lmRefreshCompleted = async () => {
+    setLmCompletedLoading(true);
+    try {
+      const res = await fetch("/api/tests/attempts");
+      if (!res.ok) return;
+      const body = await res.json();
+      const rows = Array.isArray(body?.attempts) ? body.attempts : [];
+      setLmCompleted(
+        rows.map((a: any) => ({
+          id: String(a.id),
+          chapterTitle: String(a.chapterTitle ?? "Untitled chapter"),
+          section: a.section ?? null,
+          score: Number(a.score ?? 0),
+          totalMarks: Number(a.totalMarks ?? 30),
+          passed: Boolean(a.passed),
+          completedAt: String(a.completedAt),
+        })),
+      );
+    } catch {
+      /* Keep the previous list; Completed is secondary. */
+    } finally {
+      setLmCompletedLoading(false);
+    }
+  };
+
+  const lmUpcomingLive = lmUpcoming.filter(
+    (s) => s.status === "scheduled" || s.status === "available",
+  );
+
+  // Start from Upcoming: the schedule itself pins the exact chapter
+  // (templateChapterId), so there is nothing to match against courses.
+  // A chapter sitting in several courses — or in none, after a course
+  // was deleted — starts exactly the same way, with no ambiguity and
+  // no "open it through Add test" dead end.
+  const lmStartUpcoming = (item: LmUpcomingSchedule) => {
+    void lmStartScheduledWithoutCourse(item);
+  };
+
+  // When a chapter picked from the chapter list resolves, show the two
+  // options (Do it now / Schedule). Same stale-resolve guard as above.
+  // Backing out of type-select does not re-trigger this: the ref is
+  // only set by an actual chapter tap.
+  useEffect(() => {
+    if (
+      lmChapterPickedRef.current &&
+      !lmTestResolving &&
+      lmTestResolve?.test
+    ) {
+      lmChapterPickedRef.current = false;
+      setLmTestView("type-select");
+    }
+  }, [lmTestResolve, lmTestResolving]);
+
+  // List data: whenever the Tests section is showing its list view,
+  // load the active tab (fresh on every return to the list, e.g. after
+  // scheduling or finishing a test).
+  useEffect(() => {
+    if (activeSection !== "tests" || lmTestQuestions) return;
+    if (lmTestView !== "list") return;
+    if (lmTestTab === "upcoming") void lmRefreshUpcoming();
+    else void lmRefreshCompleted();
+  }, [activeSection, lmTestView, lmTestTab, lmTestQuestions]);
+
+  const lmTestCourse =
+    courses.find((c) => c.id === lmTestCourseId) || null;
+  const lmTestChapters = lmTestCourse
+    ? getCourseChapters(lmTestCourse)
+    : [];
+  const lmTestChapter =
+    lmTestChapterIndex !== "" &&
+      lmTestChapters[Number(lmTestChapterIndex)]
+      ? lmTestChapters[Number(lmTestChapterIndex)]
+      : null;
+
+  useEffect(() => {
+    if (!lmTestCourseId || lmTestChapterIndex === "") {
+      setLmTestResolve(null);
+      return;
+    }
+    const course = courses.find((c) => c.id === lmTestCourseId);
+    if (!course) return;
+    const chapters = getCourseChapters(course);
+    const chapter = chapters[Number(lmTestChapterIndex)];
+    if (!chapter) return;
+    let cancelled = false;
+    setLmTestResolving(true);
+    setLmTestError(null);
+    lmResolveChapter(course, chapter)
+      .then((resolved) => {
+        if (cancelled) return;
+        setLmTestResolve(resolved);
+        setLmTestResolving(false);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setLmTestError(
+            err instanceof Error
+              ? err.message
+              : "Could not load this chapter's test.",
+          );
+          setLmTestResolving(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lmTestCourseId, lmTestChapterIndex, courses]);
+
+  /* ---------------- Global loading overlay ---------------- */
+  // One overlay for every Tests action, so a button click never leaves
+  // the site looking frozen: the overlay appears if the action takes
+  // longer than 200ms (fast actions never flash it) and stays until
+  // the action settles — success or error — via the finally block.
+  // Overlapping actions stack; the overlay shows the latest message.
+  const [lmLoadingStack, setLmLoadingStack] = useState<
+    { id: number; message: string }[]
+  >([]);
+  const lmLoadingIdRef = useRef(0);
+  const lmWithLoading = async <T,>(
+    message: string,
+    fn: () => Promise<T>,
+  ): Promise<T> => {
+    const id = (lmLoadingIdRef.current += 1);
+    let shown = false;
+    const timer = window.setTimeout(() => {
+      shown = true;
+      setLmLoadingStack((prev) => [...prev, { id, message }]);
+    }, 200);
+    try {
+      return await fn();
+    } finally {
+      window.clearTimeout(timer);
+      if (shown) {
+        setLmLoadingStack((prev) => prev.filter((x) => x.id !== id));
+      }
+    }
+  };
+  const lmLoadingVisible = lmLoadingStack.length > 0;
+  const lmLoadingMessage =
+    lmLoadingStack.length > 0
+      ? lmLoadingStack[lmLoadingStack.length - 1].message
+      : "";
+
+  const lmStartTest = () =>
+    lmWithLoading("Starting your test…", async () => {
+      if (!lmTestResolve?.test || !lmTestChapter) return;
+      setLmTestError(null);
+      try {
+        const res = await fetch(
+          `/api/tests/${lmTestResolve.test.id}/questions`,
+        );
+        if (!res.ok) throw new Error(await lmApiError(res));
+        const body = await res.json();
+        const questions: TestQuestion[] = [...(body.questions || [])]
+          .sort(
+            (a: any, b: any) => a.questionOrder - b.questionOrder,
+          )
+          .map((q: any) => ({
+            id: String(q.id),
+            text: String(q.questionText),
+            options: q.options as string[],
+          }));
+        setLmTestQuestions({
+          testId: String(body.test.id),
+          testTitle: String(body.test.title),
+          chapterTitle: lmTestChapter.title,
+          durationMinutes: body.test.durationMinutes ?? 30,
+          questions,
+        });
+      } catch (err) {
+        setLmTestError(
+          err instanceof Error
+            ? err.message
+            : "Could not start this test.",
+        );
+      }
+    });
+
+  // Start a scheduled test without any course: the schedule itself
+  // carries the chapter (templateChapterId), so a deleted course can
+  // never hide or block its tests. The test's own disclaimer still
+  // shows first (TestTaker always starts on the disclaimer phase).
+  const lmStartScheduledWithoutCourse = (item: LmUpcomingSchedule) =>
+    lmWithLoading("Starting your test…", async () => {
+      try {
+        const res = await fetch(
+          `/api/tests/by-template/${item.templateChapterId}`,
+        );
+        if (!res.ok) throw new Error(await lmApiError(res));
+        const body = await res.json();
+        const qres = await fetch(`/api/tests/${body.test.id}/questions`);
+        if (!qres.ok) throw new Error(await lmApiError(qres));
+        const qbody = await qres.json();
+        const questions: TestQuestion[] = [...(qbody.questions || [])]
+          .sort((a: any, b: any) => a.questionOrder - b.questionOrder)
+          .map((q: any) => ({
+            id: String(q.id),
+            text: String(q.questionText),
+            options: q.options as string[],
+          }));
+        setLmTestQuestions({
+          testId: String(qbody.test.id),
+          testTitle: String(qbody.test.title),
+          chapterTitle: item.chapterTitle,
+          durationMinutes: qbody.test.durationMinutes ?? 30,
+          questions,
+        });
+      } catch (err) {
+        showToast(
+          err instanceof Error
+            ? err.message
+            : "Could not start this test.",
+          "error",
+        );
+      }
+    });
+
+  const lmSubmitTest = (
+    answers: TestAnswer[],
+    idempotencyKey: string,
+  ): Promise<TestResult> =>
+    lmWithLoading("Submitting your test…", async () => {
+      if (!lmTestQuestions) throw new Error("No test is loaded.");
+      const res = await fetch(
+        `/api/tests/${lmTestQuestions.testId}/submit`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers, idempotencyKey }),
+        },
+      );
+      if (!res.ok) throw new Error(await lmApiError(res));
+      const body = await res.json();
+      const byId = new Map(
+        lmTestQuestions.questions.map((q) => [q.id, q]),
+      );
+      return {
+        score: body.score,
+        totalMarks: body.totalMarks,
+        passingMarks: body.passingMarks,
+        passed: body.passed,
+        perQuestion: (body.results || []).map((r: any) => {
+          const q = byId.get(r.questionId);
+          return {
+            questionId: r.questionId,
+            text: q?.text ?? "",
+            options: q?.options ?? [],
+            selectedAnswer: r.submittedAnswer,
+            correctAnswer: r.correctAnswer,
+            isCorrect: r.isCorrect,
+            marksAwarded: r.marksAwarded,
+          };
+        }),
+      };
+    });
+
+  const lmCreateTestSchedule = (scheduledAtISO: string) =>
+    lmWithLoading("Scheduling your test…", async () => {
+      if (!lmTestResolve)
+        throw new Error("Pick a course and chapter first.");
+      const res = await fetch("/api/schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateChapterId: lmTestResolve.templateChapterId,
+          scheduledAt: scheduledAtISO,
+        }),
+      });
+      if (!res.ok) throw new Error(await lmApiError(res));
+    });
+
+  const lmDeleteCompleted = (id: string) =>
+    lmWithLoading("Deleting your test…", async () => {
+      const res = await fetch(`/api/tests/attempts/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(await lmApiError(res));
+      setLmConfirmDeleteAttemptId(null);
+      await lmRefreshCompleted();
+    });
+
+  const lmCancelTestSchedule = (id: string) =>
+    lmWithLoading("Cancelling your test…", async () => {
+      const res = await fetch(`/api/schedules/${id}/cancel`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error(await lmApiError(res));
+    });
+
+
+  /* ---------------- Notifications (bell tab) ---------------- */
+
+  const lmTimeAgo = (iso: string): string => {
+    const ms = Date.now() - new Date(iso).getTime();
+    if (Number.isNaN(ms) || ms < 0) return "just now";
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return "just now";
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    return `${Math.floor(hr / 24)}d ago`;
+  };
+
+  const lmRefreshNotifs = async () => {
+    try {
+      const res = await fetch("/api/notifications");
+      if (!res.ok) return;
+      const body = await res.json();
+      const rows = Array.isArray(body?.notifications) ? body.notifications : [];
+      setNotifs(
+        rows.map((r: any) => ({
+          id: String(r.id),
+          type: String(r.type),
+          title: String(r.title),
+          body: String(r.body),
+          time: lmTimeAgo(String(r.createdAt)),
+          read: Boolean(r.readAt),
+          link: r.link ?? null,
+        })),
+      );
+    } catch {
+      /* The bell is secondary; a failed refresh just keeps old rows. */
+    }
+  };
+
+  const notifUnread = notifs.filter((n) => !n.read).length;
+
+  const lmMarkNotifRead = async (id: string) => {
+    setNotifs((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+    );
+    try {
+      await fetch(`/api/notifications/${id}/read`, { method: "POST" });
+    } catch {
+      /* Local state already updated. */
+    }
+  };
+
+  const lmMarkAllNotifsRead = async () => {
+    setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+    try {
+      await fetch("/api/notifications/read-all", { method: "POST" });
+    } catch {
+      /* Local state already updated. */
+    }
+  };
+
+  const lmOpenNotif = (n: Notif) => {
+    if (!n.read) void lmMarkNotifRead(n.id);
+    if (n.link === "tests") {
+      setNotifOpen(false);
+      setActiveSection("tests");
+      sessionStorage.setItem("learnmate-active-section", "tests");
+      setLmTestView("list");
+      setLmTestTab("upcoming");
+    }
+  };
+
+  // Streak milestones: 4 / 7 / 10 / 15 days. Every milestone at or
+  // below the current streak gets its notification (deduped by key),
+  // so a streak that jumped past a milestone still notifies for it.
+  useEffect(() => {
+    if (streakLoading || streakDays <= 0) return;
+    const due = [4, 7, 10, 15].filter((m) => streakDays >= m);
+    if (due.length === 0) return;
+    (async () => {
+      for (const m of due) {
+        try {
+          await fetch("/api/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "streak",
+              title: `${m}-day streak!`,
+              body: `You've studied ${m} days in a row. Keep it going!`,
+              key: `streak:${m}`,
+            }),
+          });
+        } catch {
+          /* Bell is secondary; ignore. */
+        }
+      }
+      void lmRefreshNotifs();
+    })();
+  }, [streakDays, streakLoading]);
+
+  // Test reminders: 24h, 12h, 4h, 2h, 1h, 30m, 10m before a scheduled
+  // test. A window notifies once its threshold is reached (deduped by
+  // key); opening the app late still shows the windows already
+  // reached. Schedules more than 24h out cost no requests at all.
+  const lmCheckReminders = async () => {
+    const windows = [
+      { label: "24 hours", ms: 24 * 3600 * 1000 },
+      { label: "12 hours", ms: 12 * 3600 * 1000 },
+      { label: "4 hours", ms: 4 * 3600 * 1000 },
+      { label: "2 hours", ms: 2 * 3600 * 1000 },
+      { label: "1 hour", ms: 3600 * 1000 },
+      { label: "30 minutes", ms: 30 * 60 * 1000 },
+      { label: "10 minutes", ms: 10 * 60 * 1000 },
+    ];
+    for (const s of lmUpcoming) {
+      if (s.status !== "scheduled" && s.status !== "available") continue;
+      const until = new Date(s.scheduledAtISO).getTime() - Date.now();
+      if (until <= 0 || until > windows[0].ms) continue;
+      for (const w of windows) {
+        if (until > w.ms) continue;
+        try {
+          await fetch("/api/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "reminder",
+              title: `Test in ${w.label}`,
+              body: `Your test for ${s.chapterTitle} is coming up — scheduled for ${new Date(s.scheduledAtISO).toLocaleString()}.`,
+              key: `reminder:${s.id}:${w.label}`,
+              link: "tests",
+            }),
+          });
+        } catch {
+          /* Bell is secondary; ignore. */
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (lmUpcoming.length === 0) return;
+    void lmCheckReminders().then(() => void lmRefreshNotifs());
+  }, [lmUpcoming]);
+
+  // Welcome safety net: accounts whose signup path never writes a
+  // profiles row (Google sign-in) never trip the welcome trigger, so
+  // make sure exactly one welcome notification exists. Deduped by
+  // key, so this is a no-op for everyone who already has one.
+  // Bell upkeep: fresh notifications + fresh schedules every minute,
+  // so reminders appear while the dashboard is open, and once on load.
+  useEffect(() => {
+    void (async () => {
+      try {
+        await fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "welcome",
+            title: "Welcome to LearnMate!",
+            body: "Your account is ready. Add a course and take your first chapter test.",
+            key: "welcome",
+          }),
+        });
+      } catch {
+        /* Bell is secondary; ignore. */
+      }
+      void lmRefreshNotifs();
+    })();
+    void lmRefreshUpcoming();
+    const t = window.setInterval(() => {
+      void lmRefreshNotifs();
+      void lmRefreshUpcoming();
+    }, 60000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  /* ---------------- Quizzes section state ---------------- */
+
+  const [lmQuizCourseId, setLmQuizCourseId] = useState<string>("");
+  const [lmQuizChapterIndex, setLmQuizChapterIndex] = useState<string>("");
+  const [lmQuizResolve, setLmQuizResolve] =
+    useState<LmResolvedChapter | null>(null);
+  const [lmQuizResolving, setLmQuizResolving] = useState(false);
+  const [lmQuizError, setLmQuizError] = useState<string | null>(null);
+  const [lmQuizQuestions, setLmQuizQuestions] = useState<TestQuestion[]>(
+    [],
+  );
+  const lmQuizIdRef = useRef<string | null>(null);
+
+  const lmQuizCourse =
+    courses.find((c) => c.id === lmQuizCourseId) || null;
+  const lmQuizChapters = lmQuizCourse
+    ? getCourseChapters(lmQuizCourse)
+    : [];
+  const lmQuizChapter =
+    lmQuizChapterIndex !== "" &&
+      lmQuizChapters[Number(lmQuizChapterIndex)]
+      ? lmQuizChapters[Number(lmQuizChapterIndex)]
+      : null;
+
+  useEffect(() => {
+    if (!lmQuizCourseId || lmQuizChapterIndex === "") {
+      setLmQuizResolve(null);
+      return;
+    }
+    const course = courses.find((c) => c.id === lmQuizCourseId);
+    if (!course) return;
+    const chapters = getCourseChapters(course);
+    const chapter = chapters[Number(lmQuizChapterIndex)];
+    if (!chapter) return;
+    let cancelled = false;
+    setLmQuizResolving(true);
+    setLmQuizError(null);
+    lmResolveChapter(course, chapter)
+      .then((resolved) => {
+        if (cancelled) return;
+        setLmQuizResolve(resolved);
+        setLmQuizResolving(false);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setLmQuizError(
+            err instanceof Error
+              ? err.message
+              : "Could not load this chapter.",
+          );
+          setLmQuizResolving(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lmQuizCourseId, lmQuizChapterIndex, courses]);
+
+  const lmGenerateQuiz = async (
+    marks: number,
+  ): Promise<QuizGenerateResult> => {
+    if (!lmQuizResolve)
+      return { error: "Pick a course and chapter first." };
+    try {
+      const res = await fetch("/api/quizzes/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateChapterId: lmQuizResolve.templateChapterId,
+          totalMarks: marks,
+        }),
+      });
+      if (!res.ok) return { error: await lmApiError(res) };
+      const body = await res.json();
+      lmQuizIdRef.current = String(body.quizId);
+      const questions: TestQuestion[] = [...(body.questions || [])]
+        .sort(
+          (a: any, b: any) => a.questionOrder - b.questionOrder,
+        )
+        .map((q: any) => ({
+          id: String(q.id),
+          text: String(q.questionText),
+          options: q.options as string[],
+        }));
+      setLmQuizQuestions(questions);
+      return { questions };
+    } catch (err) {
+      return {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Could not build this quiz.",
+      };
+    }
+  };
+
+  const lmSubmitQuiz = async (
+    answers: TestAnswer[],
+    idempotencyKey: string,
+  ): Promise<TestResult> => {
+    const quizId = lmQuizIdRef.current;
+    if (!quizId) throw new Error("No quiz is loaded.");
+    const res = await fetch(`/api/quizzes/${quizId}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers, idempotencyKey }),
+    });
+    if (!res.ok) throw new Error(await lmApiError(res));
+    const body = await res.json();
+    const byId = new Map(lmQuizQuestions.map((q) => [q.id, q]));
+    return {
+      score: body.score,
+      totalMarks: body.totalMarks,
+      // Quizzes have no pass threshold; these values are hidden by
+      // hidePassFail on the result screen and are never displayed.
+      passingMarks: 0,
+      passed: false,
+      perQuestion: (body.results || []).map((r: any) => {
+        const q = byId.get(r.questionId);
+        return {
+          questionId: r.questionId,
+          text: q?.text ?? "",
+          options: q?.options ?? [],
+          selectedAnswer: r.submittedAnswer,
+          correctAnswer: r.correctAnswer,
+          isCorrect: r.isCorrect,
+          marksAwarded: r.marksAwarded,
+        };
+      }),
+    };
+  };
+
+  /* ---------------- Milestones section state ---------------- */
+
+  const [lmMilestoneCourseId, setLmMilestoneCourseId] =
+    useState<string>("");
+  const [lmMilestoneChapters, setLmMilestoneChapters] = useState<
+    { id: string; title: string; completed: boolean }[]
+  >([]);
+  const [lmMilestoneLoading, setLmMilestoneLoading] = useState(false);
+  const [lmMilestoneError, setLmMilestoneError] = useState<string | null>(
+    null,
+  );
+  const [lmMilestoneNotice, setLmMilestoneNotice] = useState<string | null>(
+    null,
+  );
+
+  const lmMilestoneCourse =
+    courses.find((c) => c.id === lmMilestoneCourseId) || null;
+  const lmOngoingCourses = courses.filter((c) => c.progress < 100);
+
+  const lmMilestoneKey = (
+    course: Course,
+    chapter: CurriculumChapter,
+  ): string =>
+    `${getCurriculumKey(course)}|${chapter.section ?? ""}|${chapter.title}`;
+
+  useEffect(() => {
+    const course = courses.find((c) => c.id === lmMilestoneCourseId);
+    if (!course) {
+      setLmMilestoneChapters([]);
+      setLmMilestoneError(null);
+      return;
+    }
+    const chapters = getCourseChapters(course);
+    let cancelled = false;
+    setLmMilestoneLoading(true);
+    setLmMilestoneError(null);
+    (async () => {
+      try {
+        // Completion overlay is best-effort: per-user chapters /
+        // milestones rows may not exist yet (course creation only
+        // writes a courses row). Missing rows mean "not completed" —
+        // completion is never faked on the client.
+        const completedTitles = new Set<string>();
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+        if (authUser) {
+          const { data: dbChapters } = await supabase
+            .from("chapters")
+            .select("id,title")
+            .eq("course_id", course.id);
+          if (dbChapters?.length) {
+            const rows = dbChapters as { id: string; title: string }[];
+            const titleByChapterId = new Map(
+              rows.map((c) => [c.id, c.title]),
+            );
+            const chapterIds = rows.map((c) => c.id);
+            const { data: ms } = await supabase
+              .from("milestones")
+              .select("id,chapter_id")
+              .in("chapter_id", chapterIds);
+            if (ms?.length) {
+              const mrows = ms as { id: string; chapter_id: string }[];
+              const milestoneIds = mrows.map((m) => m.id);
+              const milestoneToTitle = new Map(
+                mrows.map((m) => [
+                  m.id,
+                  titleByChapterId.get(m.chapter_id) ?? "",
+                ]),
+              );
+              const { data: progress } = await supabase
+                .from("milestone_progress")
+                .select("milestone_id,completed")
+                .eq("user_id", authUser.id)
+                .in("milestone_id", milestoneIds);
+              (
+                progress as
+                | { milestone_id: string; completed: boolean }[]
+                | null
+              )?.forEach((p) => {
+                if (p.completed) {
+                  const t = milestoneToTitle.get(p.milestone_id);
+                  if (t) completedTitles.add(t);
+                }
+              });
+            }
+          }
+        }
+        if (cancelled) return;
+        setLmMilestoneChapters(
+          chapters.map((ch) => ({
+            id: lmMilestoneKey(course, ch),
+            title: ch.title,
+            completed: completedTitles.has(ch.title),
+          })),
+        );
+        setLmMilestoneLoading(false);
+      } catch (err) {
+        if (!cancelled) {
+          setLmMilestoneError(
+            err instanceof Error
+              ? err.message
+              : "Could not load this learning path.",
+          );
+          setLmMilestoneLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lmMilestoneCourseId, courses]);
+
+  const lmHandleMilestoneWatch = (course: Course, chapterId: string) => {
+    // Defense-in-depth gate: MilestonePath already refuses to call this
+    // when resolveChapterVideo returns null. If a URL ever resolves, the
+    // existing chapter-selection mechanism opens that chapter's lesson.
+    // NOTE: future resolveVideo map keys must be these curriculum keys
+    // (classLevel|subject|section|title) for the gate to line up.
+    const videoUrl = resolveChapterVideo(chapterId);
+    if (!videoUrl) {
+      setLmMilestoneNotice(
+        "The video for this chapter has not been added yet.",
+      );
+      return;
+    }
+    const parts = chapterId.split("|");
+    const title = parts.slice(3).join("|");
+    const section = parts[2] || undefined;
+    const chapter = getCourseChapters(course).find(
+      (c) => c.title === title && (c.section ?? "") === (section ?? ""),
+    );
+    if (!chapter) {
+      setLmMilestoneNotice("Could not open that chapter.");
+      return;
+    }
+    setLmMilestoneNotice(null);
+    setActiveSection("courses");
+    sessionStorage.setItem("learnmate-active-section", "courses");
+    setSelectedCourseId(course.id);
+    setSelectedChapter(chapter);
+  };
+
+  /* ==========================================================
+       MARK 2 — NAVIGATION
+    ========================================================== */
 
   const handleNavClick = (
     label: string,
@@ -2725,6 +3510,33 @@ export default function DashboardPage() {
       sessionStorage.setItem(
         "learnmate-active-section",
         "ai",
+      );
+
+      return;
+    }
+
+
+    if (label === "Tests") {
+      setActiveSection("tests");
+      setAddOpen(false);
+      setAddClosing(false);
+
+      sessionStorage.setItem(
+        "learnmate-active-section",
+        "tests",
+      );
+
+      return;
+    }
+
+    if (label === "Milestones") {
+      setActiveSection("milestones");
+      setAddOpen(false);
+      setAddClosing(false);
+
+      sessionStorage.setItem(
+        "learnmate-active-section",
+        "milestones",
       );
 
       return;
@@ -3883,6 +4695,8 @@ export default function DashboardPage() {
                       (value) =>
                         !value,
                     );
+
+                    void lmRefreshNotifs();
                   }}
                 >
                   <span
@@ -3892,10 +4706,10 @@ export default function DashboardPage() {
                     🔔
                   </span>
 
-                  {notifs.length >
+                  {notifUnread >
                     0 && (
                       <span className="dot">
-                        {notifs.length}
+                        {notifUnread}
                       </span>
                     )}
                 </button>
@@ -3952,48 +4766,50 @@ export default function DashboardPage() {
                   e.stopPropagation()
                 }
               >
-                <h4>
-                  Notifications
-                </h4>
+                <div className="notif-head">
+                  <h4>
+                    Notifications
+                  </h4>
 
-                {notifs.length ===
-                  0 ? (
+                  {notifUnread > 0 && (
+                    <button
+                      type="button"
+                      className="btn-cream"
+                      onClick={() => void lmMarkAllNotifsRead()}
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+
+                {notifs.length === 0 ? (
                   <p className="muted">
-                    No new
-                    notifications.
+                    No new notifications.
                   </p>
                 ) : (
-                  notifs.map(
-                    (n, i) => (
-                      <div
-                        key={i}
-                        className="notif"
-                      >
-                        <span>
-                          🔔
-                        </span>
+                  notifs.map((n) => (
+                    <div
+                      key={n.id}
+                      className={n.read ? "notif" : "notif is-unread"}
+                      onClick={() => lmOpenNotif(n)}
+                    >
+                      <span>
+                        🔔
+                      </span>
 
-                        <span>
-                          <b>
-                            {n.title}
-                          </b>
+                      <span>
+                        <b>
+                          {n.title}
+                        </b>
 
-                          <br />
+                        <br />
 
-                          <small>
-                            {
-                              n.body
-                            }{" "}
-                            ·{" "}
-                            {
-                              n.time
-                            }{" "}
-                            ago
-                          </small>
-                        </span>
-                      </div>
-                    ),
-                  )
+                        <small>
+                          {n.body} · {n.time}
+                        </small>
+                      </span>
+                    </div>
+                  ))
                 )}
               </div>
             )}
@@ -4786,10 +5602,33 @@ export default function DashboardPage() {
                     </div>
                     <div className="lesson-layout">
                       <div className="lesson-player">
-                        {(() => { const videoSrc = ""; return videoSrc ? <video controls playsInline src={videoSrc} /> : <img className="lesson-fallback" src="/404.jpg" alt="Video unavailable for this chapter" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />; })()}
-                        <div className="lesson-empty-note">The video for this chapter has not been added yet.</div>
+                        {(() => {
+                          const lessonKey = `${getCurriculumKey(selectedCourse)}|${selectedChapter.section ?? ""}|${selectedChapter.title}`;
+                          const videoSrc = resolveChapterVideo(lessonKey);
+                          if (!videoSrc) {
+                            return (
+                              <>
+                                <img className="lesson-fallback" src="/404.jpg" alt="Video unavailable for this chapter" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                                <div className="lesson-empty-note">The video for this chapter has not been added yet.</div>
+                              </>
+                            );
+                          }
+                          const yt = videoSrc.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+                          if (yt) {
+                            return (
+                              <iframe
+                                className="lesson-video"
+                                src={`https://www.youtube-nocookie.com/embed/${yt[1]}`}
+                                title={selectedChapter.title}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              />
+                            );
+                          }
+                          return <video controls playsInline src={videoSrc} />;
+                        })()}
                       </div>
-                      <aside className="lesson-details"><span className="lesson-eyebrow">NOW LEARNING</span><h2>{selectedChapter.title}</h2><p>Follow the lesson at your own pace. Your video will appear here once its source is connected.</p><button type="button" className="btn-brown" onClick={() => setSelectedChapter(null)}>All Chapters <span>→</span></button></aside>
+                      <aside className="lesson-details"><span className="lesson-eyebrow">NOW LEARNING</span><h2>{selectedChapter.title}</h2><p>Follow the lesson at your own pace.</p><button type="button" className="btn-brown" onClick={() => setSelectedChapter(null)}>All Chapters <span>→</span></button></aside>
                     </div>
                   </section>
                 )}
@@ -5313,6 +6152,517 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
+                )}
+              </section>
+            )}
+            {activeSection === "tests" && (
+              <section className="lm-section courses-content courses-content-visible">
+                {lmTestQuestions ? (
+                  <TestTaker
+                    key={lmTestQuestions.testId}
+                    testTitle={lmTestQuestions.testTitle}
+                    chapterTitle={lmTestQuestions.chapterTitle}
+                    durationMinutes={lmTestQuestions.durationMinutes}
+                    questions={lmTestQuestions.questions}
+                    onSubmit={lmSubmitTest}
+                    onTimeWarning={(m) => showToast(m, "success")}
+                    onExit={() => {
+                      setLmTestQuestions(null);
+                      setLmTestView("list");
+                      void lmRefreshUpcoming();
+                      void lmRefreshCompleted();
+                    }}
+                  />
+                ) : (
+                  <>
+                    <div className="courses-heading-row">
+                      <div className="courses-heading-copy">
+                        <h1 className="h1">Tests</h1>
+                        <p className="sub">One test per chapter: 30 questions, 30 marks, pass at 18. If you leave a test, it restarts from the beginning and nothing is recorded until you submit.</p>
+                      </div>
+                      {lmTestView === "list" && (
+                        <button
+                          type="button"
+                          className="btn-brown add-course-top"
+                          onClick={() => setLmTestView("pick-course")}
+                        >
+                          + Add test
+                        </button>
+                      )}
+                    </div>
+                    {lmTestView === "pick-course" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-cream"
+                          onClick={() => setLmTestView("list")}
+                        >
+                          ← Back to tests
+                        </button>
+                        <div className="courses-section-head">
+                          <div>
+                            <h2>Pick a course</h2>
+                            <p>Choose one of your ongoing courses</p>
+                          </div>
+                        </div>
+                        {lmOngoingCourses.length === 0 ? (
+                          <>
+                            <p className="sub">
+                              {courses.length === 0
+                                ? "You don't have any courses right now, so you can add a course."
+                                : "All your courses are completed. Start a new course to take its chapter tests."}
+                            </p>
+                            <button
+                              type="button"
+                              className="btn-brown"
+                              onClick={() => {
+                                setActiveSection("courses");
+                                sessionStorage.setItem("learnmate-active-section", "courses");
+                                openAddCourse();
+                              }}
+                            >
+                              + Add a course
+                            </button>
+                          </>
+                        ) : (
+                          <div className="courses-list">
+                            {lmOngoingCourses.map((course) => (
+                              <article
+                                key={course.id}
+                                className="course-card"
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setLmTestCourseId(course.id);
+                                  setLmTestChapterIndex("");
+                                  setLmTestView("pick-chapter");
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    setLmTestCourseId(course.id);
+                                    setLmTestChapterIndex("");
+                                    setLmTestView("pick-chapter");
+                                  }
+                                }}
+                              >
+                                <div className="course-card-top">
+                                  <div className="course-subject-icon">
+                                    {getSubjectIcon(course.subject)}
+                                  </div>
+                                  <div className="course-card-title">
+                                    <h3>
+                                      {course.subject}
+                                      {course.mathVariant && ` (${course.mathVariant})`}
+                                    </h3>
+                                    <p>
+                                      {course.class}
+                                      {course.stream && ` · ${course.stream}`}
+                                    </p>
+                                  </div>
+                                  <span className="course-status">Ongoing</span>
+                                </div>
+                                <div className="course-progress">
+                                  <div className="course-progress-row">
+                                    <span>Progress</span>
+                                    <b>{course.progress}%</b>
+                                  </div>
+                                  <div className="course-progress-track">
+                                    <i style={{ width: `${course.progress}%` }} />
+                                  </div>
+                                </div>
+                                <div className="course-card-bottom">
+                                  <span>
+                                    {course.stream || course.class}
+                                  </span>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : lmTestView === "pick-chapter" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-cream"
+                          onClick={() => {
+                            setLmTestChapterIndex("");
+                            setLmTestView("pick-course");
+                          }}
+                        >
+                          ← Back to courses
+                        </button>
+                        <div className="courses-section-head">
+                          <div>
+                            <h2>{lmTestCourse ? `${lmTestCourse.class} · ${lmTestCourse.subject}` : "Pick a chapter"}</h2>
+                            <p>Choose a chapter to test yourself on</p>
+                          </div>
+                        </div>
+                        {lmTestResolving ? (
+                          <div className="lm-spinner-wrap" role="status" aria-label="Loading test">
+                            <span className="lm-spinner" aria-hidden="true" />
+                          </div>
+                        ) : lmTestError ? (
+                          <>
+                            <p className="lm-error" role="alert">{lmTestError}</p>
+                            <button
+                              type="button"
+                              className="btn-cream"
+                              onClick={() => setLmTestChapterIndex("")}
+                            >
+                              Choose another chapter
+                            </button>
+                          </>
+                        ) : lmTestResolve && !lmTestResolve.test ? (
+                          <>
+                            <div className="empty-section">This chapter&apos;s test hasn&apos;t been imported yet. Run the import, then refresh this page.</div>
+                            <button
+                              type="button"
+                              className="btn-cream"
+                              onClick={() => setLmTestChapterIndex("")}
+                            >
+                              Choose another chapter
+                            </button>
+                          </>
+                        ) : (
+                          <div className="lm-chapter-list">
+                            {lmTestChapters.map((chapter, index) => (
+                              <button
+                                key={`${chapter.section ?? ""}|${chapter.title}`}
+                                type="button"
+                                className={`lm-chapter-row ${String(index) === lmTestChapterIndex ? "is-selected" : ""}`}
+                                onClick={() => {
+                                  lmChapterPickedRef.current = true;
+                                  setLmTestChapterIndex(String(index));
+                                }}
+                              >
+                                <span className="lm-chapter-row-title">
+                                  {chapter.section
+                                    ? `${chapter.section} — ${chapter.title}`
+                                    : chapter.title}
+                                </span>
+                                <span aria-hidden="true">→</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : lmTestView === "type-select" && lmTestResolve?.test && lmTestChapter ? (
+                      <TestTypeSelect
+                        testTitle={lmTestResolve.test.title}
+                        chapterTitle={lmTestChapter.title}
+                        onDoNow={() => {
+                          void lmStartTest();
+                        }}
+                        onSchedule={() => {
+                          setLmTestView("schedule");
+                        }}
+                        onBack={() => setLmTestView("pick-chapter")}
+                      />
+                    ) : lmTestView === "schedule" && lmTestResolve?.test && lmTestChapter ? (
+                      <ScheduleTestForm
+                        onCreate={async (iso) => {
+                          await lmCreateTestSchedule(iso);
+                          setLmTestTab("upcoming");
+                          setLmTestView("list");
+                          void lmRefreshNotifs();
+                        }}
+                        onBack={() => setLmTestView("type-select")}
+                      />
+                    ) : (
+                      <>
+                        <div className="course-tabs" role="tablist" aria-label="Tests views">
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={lmTestTab === "upcoming"}
+                            className={`course-tab ${lmTestTab === "upcoming" ? "active" : ""}`}
+                            onClick={() => setLmTestTab("upcoming")}
+                          >
+                            Upcoming
+                            <span>{lmUpcomingLive.length}</span>
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={lmTestTab === "completed"}
+                            className={`course-tab ${lmTestTab === "completed" ? "active" : ""}`}
+                            onClick={() => setLmTestTab("completed")}
+                          >
+                            Completed
+                            <span>{lmCompleted.length}</span>
+                          </button>
+                        </div>
+                        {lmTestTab === "upcoming" ? (
+                          <>
+                            <div className="courses-section-head">
+                              <div>
+                                <h2>Upcoming tests</h2>
+                                <p>Tests you have scheduled and can still take</p>
+                              </div>
+                            </div>
+                            {lmUpcomingLoading ? (
+                              <div className="lm-spinner-wrap" role="status" aria-label="Loading upcoming tests">
+                                <span className="lm-spinner" aria-hidden="true" />
+                              </div>
+                            ) : lmUpcomingLive.length === 0 ? (
+                              <div className="empty-section">No tests scheduled yet. Press “Add test”, pick a course and chapter, then “Schedule the test”.</div>
+                            ) : (
+                              <div className="lm-upcoming-list">
+                                {lmUpcomingLive.map((s) => (
+                                  <div key={s.id} className="lm-upcoming-card">
+                                    <div>
+                                      <p className="lm-upcoming-title">
+                                        {s.chapterTitle}
+                                        {s.section ? ` — ${s.section}` : ""}
+                                      </p>
+                                      <p className="lm-upcoming-meta">
+                                        <span>{new Date(s.scheduledAtISO).toLocaleString()}</span>
+                                        <span
+                                          className={`lm-upcoming-pill ${s.status === "available" ? "is-available" : "is-scheduled"}`}
+                                        >
+                                          {s.status === "available" ? "Available now" : "Scheduled"}
+                                        </span>
+                                      </p>
+                                    </div>
+                                    <div className="lm-upcoming-actions">
+                                      <button
+                                        type="button"
+                                        className="btn-brown"
+                                        onClick={() => lmStartUpcoming(s)}
+                                      >
+                                        Start test
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-cream"
+                                        onClick={async () => {
+                                          await lmCancelTestSchedule(s.id);
+                                          await lmRefreshUpcoming();
+                                        }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div className="courses-section-head">
+                              <div>
+                                <h2>Completed tests</h2>
+                                <p>Tests you have submitted</p>
+                              </div>
+                            </div>
+                            {lmCompletedLoading ? (
+                              <div className="lm-spinner-wrap" role="status" aria-label="Loading completed tests">
+                                <span className="lm-spinner" aria-hidden="true" />
+                              </div>
+                            ) : lmCompleted.length === 0 ? (
+                              <div className="empty-section">No completed tests yet. Finish a test and it will show up here.</div>
+                            ) : (
+                              <div className="lm-upcoming-list">
+                                {lmCompleted.map((t) => (
+                                  <div key={t.id} className="lm-upcoming-card">
+                                    <div>
+                                      <p className="lm-upcoming-title">
+                                        {t.chapterTitle}
+                                        {t.section ? ` — ${t.section}` : ""}
+                                      </p>
+                                      <p className="lm-upcoming-meta">
+                                        <span>{new Date(t.completedAt).toLocaleString()}</span>
+                                        <span
+                                          className={`lm-upcoming-pill ${t.passed ? "is-available" : "is-scheduled"}`}
+                                        >
+                                          {t.passed ? "Passed" : "Not passed"}
+                                        </span>
+                                      </p>
+                                    </div>
+                                    <div className="lm-upcoming-actions">
+                                      <span className="lm-completed-score">{t.score} / {t.totalMarks}</span>
+                                      {lmConfirmDeleteAttemptId === t.id ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            className="btn-brown"
+                                            onClick={async () => {
+                                              try {
+                                                await lmDeleteCompleted(t.id);
+                                              } catch (err) {
+                                                showToast(
+                                                  err instanceof Error
+                                                    ? err.message
+                                                    : "Could not delete this test record.",
+                                                  "error",
+                                                );
+                                              }
+                                            }}
+                                          >
+                                            Yes, delete
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btn-cream"
+                                            onClick={() => setLmConfirmDeleteAttemptId(null)}
+                                          >
+                                            Keep it
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="btn-cream"
+                                          onClick={() => setLmConfirmDeleteAttemptId(t.id)}
+                                        >
+                                          Delete
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
+
+            {activeSection === "quizzes" && (
+              <section className="lm-section courses-content courses-content-visible">
+                <div className="courses-heading-row">
+                  <div className="courses-heading-copy">
+                    <h1 className="h1">Quizzes</h1>
+                    <p className="sub">Practice quizzes at 10, 30, 50, or custom marks. Quiz attempts are recorded when you submit.</p>
+                  </div>
+                </div>
+                {courses.length === 0 ? (
+                  <div className="empty-section">Add a course first, then come back here to practise its chapters.</div>
+                ) : (
+                  <>
+                    <div className="lm-picker-row">
+                      <label className="lm-picker-label">
+                        Course
+                        <select
+                          value={lmQuizCourseId}
+                          onChange={(e) => {
+                            setLmQuizCourseId(e.target.value);
+                            setLmQuizChapterIndex("");
+                            setLmQuizResolve(null);
+                            lmQuizIdRef.current = null;
+                            setLmQuizQuestions([]);
+                          }}
+                        >
+                          <option value="">Choose a course…</option>
+                          {courses.map((course) => (
+                            <option key={course.id} value={course.id}>
+                              {course.class} · {course.subject}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="lm-picker-label">
+                        Chapter
+                        <select
+                          value={lmQuizChapterIndex}
+                          disabled={!lmQuizCourse}
+                          onChange={(e) => {
+                            setLmQuizChapterIndex(e.target.value);
+                            lmQuizIdRef.current = null;
+                            setLmQuizQuestions([]);
+                          }}
+                        >
+                          <option value="">Choose a chapter…</option>
+                          {lmQuizChapters.map((chapter, index) => (
+                            <option
+                              key={`${chapter.section ?? ""}|${chapter.title}`}
+                              value={String(index)}
+                            >
+                              {chapter.section
+                                ? `${chapter.section} — ${chapter.title}`
+                                : chapter.title}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    {lmQuizResolving && (
+                      <p className="sub">Loading chapter…</p>
+                    )}
+                    {lmQuizError && (
+                      <p className="lm-error" role="alert">{lmQuizError}</p>
+                    )}
+                    {lmQuizResolve && lmQuizChapter && (
+                      <QuizTaker
+                        key={`${lmQuizCourseId}:${lmQuizChapterIndex}`}
+                        chapterTitle={lmQuizChapter.title}
+                        onGenerate={lmGenerateQuiz}
+                        onSubmit={lmSubmitQuiz}
+                        hidePassFail
+                        onExit={() => {
+                          lmQuizIdRef.current = null;
+                          setLmQuizQuestions([]);
+                        }}
+                      />
+                    )}
+                  </>
+                )}
+              </section>
+            )}
+
+            {activeSection === "milestones" && (
+              <section className="lm-section courses-content courses-content-visible">
+                <div className="courses-heading-row">
+                  <div className="courses-heading-copy">
+                    <h1 className="h1">Milestones</h1>
+                    <p className="sub">One path per ongoing course. Every milestone is a chapter, in order. Watching a video never marks a chapter complete.</p>
+                  </div>
+                </div>
+                {lmOngoingCourses.length === 0 ? (
+                  <div className="empty-section">No ongoing courses yet. Add a course, and its chapter path will appear here.</div>
+                ) : (
+                  <>
+                    <div className="lm-picker-row">
+                      <label className="lm-picker-label">
+                        Course
+                        <select
+                          value={lmMilestoneCourseId}
+                          onChange={(e) => {
+                            setLmMilestoneCourseId(e.target.value);
+                            setLmMilestoneNotice(null);
+                          }}
+                        >
+                          <option value="">Choose a course…</option>
+                          {lmOngoingCourses.map((course) => (
+                            <option key={course.id} value={course.id}>
+                              {course.class} · {course.subject} ({course.progress}%)
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    {lmMilestoneNotice && (
+                      <p className="lm-error" role="alert">{lmMilestoneNotice}</p>
+                    )}
+                    {lmMilestoneCourse && (
+                      <MilestonePath
+                        courseTitle={`${lmMilestoneCourse.class} · ${lmMilestoneCourse.subject}`}
+                        chapters={lmMilestoneChapters}
+                        onWatchVideo={(chapterId) =>
+                          lmHandleMilestoneWatch(lmMilestoneCourse, chapterId)
+                        }
+                        loading={lmMilestoneLoading}
+                        error={lmMilestoneError}
+                      />
+                    )}
+                  </>
                 )}
               </section>
             )}
@@ -6223,6 +7573,36 @@ export default function DashboardPage() {
                 >
                   {courseDeleteLoading ? "Deleting..." : "Delete courses"}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* GLOBAL LOADING OVERLAY */}
+
+        {lmLoadingVisible && (
+          <div
+            className="lm-loading-overlay"
+            role="status"
+            aria-live="polite"
+            aria-label={lmLoadingMessage}
+          >
+            <div className="lm-loading-card">
+              <span
+                className="lm-spinner lm-loading-spinner"
+                aria-hidden="true"
+              />
+
+              <div className="lm-loading-brand">
+                LearnMate
+              </div>
+
+              <div className="lm-loading-message">
+                {lmLoadingMessage}
+              </div>
+
+              <div className="lm-loading-sub">
+                Please wait…
               </div>
             </div>
           </div>
@@ -10197,4 +11577,924 @@ body{
     animation:none
   }
 }
+
+.lm .lm-section{margin-top:8px}
+.lm .lm-picker-row{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
+.lm .lm-picker-label{display:flex;flex-direction:column;gap:6px;font-weight:600}
+.lm .lm-picker-label select{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);max-width:420px}
+.lm .lm-test-taker,.lm .lm-quiz-taker,.lm .lm-schedule-form{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin:16px 0}
+.lm .lm-question{font-size:18px;font-weight:600;margin:12px 0}
+.lm .lm-options{display:grid;gap:8px;margin:12px 0}
+.lm .lm-option-label{display:flex;gap:10px;align-items:flex-start;background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer}
+.lm .lm-question-nav,.lm .lm-test-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.lm .lm-review-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:8px;margin:12px 0}
+.lm .lm-review-item{background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center}
+.lm .lm-review-list{display:grid;gap:12px}
+.lm .lm-dialog{background:var(--card-2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:12px}
+.lm .lm-error{color:#9b1c1c;font-weight:600}
+.lm .lm-marks-options{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.lm .lm-custom-marks input{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text)}
+.lm .lm-schedule-list{display:grid;gap:8px;margin:12px 0}
+.lm .lm-schedule-item{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.lm .lm-schedule-picker{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.lm .lm-cancel-reason{color:var(--muted)}
+.lm .lm-chapter-title{color:var(--text-2)}
+.lm .lm-test-meta{color:var(--text-2)}
+.lm .lm-submitting{color:var(--muted)}
+.lm .lm-option-correct{color:#2e7d32;font-weight:700}
+.lm .lm-option-selected-wrong{color:#9b1c1c}
+.lm .lm-push-row{margin:16px 0}
+/* ============================================================================
+   LearnMate — Mark 6 Tests UI styles.
+   PASTE this whole block inside the dashboard CSS string in
+   app/dashboard/page.tsx, just before the closing backtick of the CSS
+   string (the line at the very end of the CSS that only contains a
+   backtick followed by a semicolon).
+   Uses ONLY the existing CSS variables, so it follows light + dark mode.
+   Do NOT redefine .type-cursor — it already exists in the dashboard CSS.
+   Reduced motion is already handled by the existing global
+   lm-star rule (animation none, transition none), so these animations
+   automatically switch off for users who prefer reduced motion.
+   Toast z-index is 500, so the test dialogs below sit under toasts.
+   ========================================================================== */
+
+/* ------------------------------ Test overlay ------------------------------ */
+
+/* The test is a normal in-flow section now, NOT a fixed overlay:
+   no separate scrollbar, no scroll lock — the page's own scrollbar
+   moves the whole test, and nothing can be clipped off-screen. */
+.lm-tt{
+  width:100%;
+  background:var(--bg);
+  color:var(--text);
+  padding-bottom:24px;
+}
+
+.lm-tt-sr{
+  position:absolute;
+  width:1px;
+  height:1px;
+  overflow:hidden;
+  clip:rect(0 0 0 0);
+  white-space:nowrap;
+}
+
+.lm-tt-sub{
+  color:var(--text-2);
+  margin-top:4px;
+  line-height:1.5;
+}
+
+.lm-tt-error{
+  max-width:1080px;
+  margin:0 auto 16px;
+}
+
+/* ------------------------------ Timer ring -------------------------------- */
+/* --tt-p is a unitless 0–100 number set inline once per tick. */
+
+.lm-tt-ring{
+  position:relative;
+  width:128px;
+  height:128px;
+  border-radius:50%;
+  flex-shrink:0;
+  display:grid;
+  place-items:center;
+  background:conic-gradient(
+    var(--brown) 0 calc(var(--tt-p, 100) * 1%),
+    var(--track) calc(var(--tt-p, 100) * 1%) 100%
+  );
+}
+
+.lm-tt-ring-core{
+  width:96px;
+  height:96px;
+  border-radius:50%;
+  background:var(--card);
+  display:grid;
+  place-items:center;
+  font-weight:800;
+  font-size:20px;
+  color:var(--text);
+}
+
+.lm-tt-ring-knob{
+  position:absolute;
+  top:4px;
+  left:50%;
+  width:16px;
+  height:16px;
+  margin-left:-8px;
+  border-radius:50%;
+  background:var(--brown);
+  border:3px solid var(--card);
+  transform-origin:50% 60px;
+  transform:rotate(calc(var(--tt-p, 100) * 3.6deg));
+}
+
+.lm-tt-ring.is-urgent{
+  background:conic-gradient(
+    var(--red) 0 calc(var(--tt-p, 100) * 1%),
+    var(--track) calc(var(--tt-p, 100) * 1%) 100%
+  );
+}
+
+.lm-tt-ring.is-urgent .lm-tt-ring-knob{
+  background:var(--red);
+}
+
+.lm-tt-ring.is-urgent .lm-tt-ring-core{
+  color:var(--red);
+}
+
+/* ------------------------------ Taking screen ----------------------------- */
+
+.lm-tt-top{
+  max-width:1080px;
+  margin:0 auto 20px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:20px;
+  flex-wrap:wrap;
+}
+
+.lm-tt-heading h2{
+  font-size:26px;
+  line-height:1.2;
+}
+
+.lm-tt-body{
+  max-width:1080px;
+  margin:0 auto;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) 300px;
+  gap:20px;
+  align-items:start;
+}
+
+.lm-tt-stage{
+  position:relative;
+  min-width:0;
+}
+
+.lm-tt-screen{
+  width:100%;
+}
+
+.lm-tt-screen.lm-tt-out-next,
+.lm-tt-screen.lm-tt-out-prev{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+}
+
+/* Slide direction follows the request literally: Next slides right,
+   Previous slides left. 340ms matches SLIDE_MS in TestTaker.tsx. */
+.lm-tt-in-next{animation:ttInNext .34s ease both}
+.lm-tt-out-next{animation:ttOutNext .34s ease both}
+.lm-tt-in-prev{animation:ttInPrev .34s ease both}
+.lm-tt-out-prev{animation:ttOutPrev .34s ease both}
+
+@keyframes ttInNext{from{opacity:0;transform:translateX(-48px)}to{opacity:1;transform:none}}
+@keyframes ttOutNext{from{opacity:1;transform:none}to{opacity:0;transform:translateX(48px)}}
+@keyframes ttInPrev{from{opacity:0;transform:translateX(48px)}to{opacity:1;transform:none}}
+@keyframes ttOutPrev{from{opacity:1;transform:none}to{opacity:0;transform:translateX(-48px)}}
+
+.lm-tt-qwin{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:24px;
+}
+
+.lm-tt-qhead{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  color:var(--text-2);
+  font-size:13px;
+  font-weight:700;
+}
+
+.lm-tt-qstate.is-answered{
+  color:var(--brown);
+}
+
+.lm-tt-qtext{
+  font-size:22px;
+  line-height:1.45;
+  margin:16px 0 20px;
+  min-height:2.9em;
+}
+
+.lm-tt-options{
+  display:grid;
+  gap:10px;
+  opacity:0;
+  transform:translateY(6px);
+  transition:opacity .3s ease, transform .3s ease;
+}
+
+.lm-tt-options.is-in{
+  opacity:1;
+  transform:none;
+}
+
+.lm-tt-opt{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  background:var(--card-2);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:14px 16px;
+  cursor:pointer;
+  transition:border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.lm-tt-opt:hover{
+  border-color:var(--brown);
+}
+
+.lm-tt-opt:focus-within{
+  box-shadow:0 0 0 2px var(--brown);
+}
+
+.lm-tt-opt.is-selected{
+  border-color:var(--brown);
+  background:var(--cream-soft);
+  box-shadow:0 0 0 1px var(--brown);
+}
+
+.lm-tt-radio{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+
+.lm-tt-opt-key{
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  background:var(--icon-bg);
+  color:var(--brown);
+  display:grid;
+  place-items:center;
+  font-weight:800;
+  flex-shrink:0;
+}
+
+.lm-tt-opt.is-selected .lm-tt-opt-key{
+  background:var(--brown);
+  color:var(--cream-soft);
+}
+
+.lm-tt-opt-text{
+  line-height:1.4;
+}
+
+.lm-tt-nav{
+  display:flex;
+  justify-content:space-between;
+  margin-top:20px;
+}
+
+/* --------------------------- Question palette ----------------------------- */
+
+.lm-tt-panel{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:20px;
+  align-self:start;
+}
+
+.lm-tt-panel-title{
+  font-size:18px;
+}
+
+.lm-tt-legend{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:var(--text-2);
+  font-size:13px;
+  margin:10px 0 14px;
+  flex-wrap:wrap;
+}
+
+.lm-tt-dot{
+  width:12px;
+  height:12px;
+  border-radius:50%;
+  background:var(--card-2);
+  border:1px solid var(--border);
+  display:inline-block;
+  flex-shrink:0;
+}
+
+.lm-tt-dot.is-answered{
+  background:var(--brown);
+  border-color:var(--brown);
+}
+
+.lm-tt-legend-sep{
+  width:1px;
+  height:14px;
+  background:var(--border);
+}
+
+.lm-tt-grid{
+  list-style:none;
+  display:grid;
+  grid-template-columns:repeat(5, 1fr);
+  gap:8px;
+}
+
+.lm-tt-grid li{
+  list-style:none;
+}
+
+.lm-tt-box{
+  width:100%;
+  aspect-ratio:1;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--card-2);
+  color:var(--text);
+  font:inherit;
+  font-weight:700;
+  cursor:pointer;
+  transition:border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.lm-tt-box:hover{
+  border-color:var(--brown);
+}
+
+.lm-tt-box.is-answered{
+  background:var(--brown);
+  color:var(--cream-soft);
+  border-color:var(--brown);
+}
+
+.lm-tt-box.is-current{
+  box-shadow:0 0 0 2px var(--cream), 0 0 0 4px var(--brown);
+}
+
+.lm-tt-submit{
+  width:100%;
+  margin-top:16px;
+}
+
+.lm-tt-leave{
+  width:100%;
+  margin-top:10px;
+}
+
+/* ------------------------------ Dialogs ----------------------------------- */
+
+.lm-tt-scrim{
+  position:fixed;
+  inset:0;
+  background:rgba(23, 16, 10, .55);
+  display:grid;
+  place-items:center;
+  z-index:70;
+  padding:20px;
+}
+
+.lm-tt-dialog{
+  background:var(--card);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:24px;
+  max-width:480px;
+  width:100%;
+}
+
+.lm-tt-dialog h3{
+  margin-bottom:10px;
+}
+
+.lm-tt-dialog p{
+  color:var(--text-2);
+  line-height:1.5;
+}
+
+.lm-tt-dialog-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  margin-top:18px;
+  flex-wrap:wrap;
+}
+
+.lm-tt-submitting{
+  color:var(--cream-soft);
+  font-weight:700;
+}
+
+/* ------------------------------ Disclaimer -------------------------------- */
+
+.lm-tt-disclaimer{
+  display:flex;
+  flex-direction:column;
+}
+
+.lm-tt-dis-body{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  max-width:720px;
+  margin:0 auto;
+  width:100%;
+}
+
+.lm-tt-dis-title{
+  font-size:30px;
+  line-height:1.2;
+  margin:12px 0 20px;
+}
+
+.lm-tt-dis-list{
+  list-style:none;
+  display:grid;
+  gap:12px;
+}
+
+.lm-tt-dis-item{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:16px 18px;
+  line-height:1.5;
+}
+
+.lm-tt-dis-actions{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  max-width:720px;
+  margin:24px auto 0;
+  width:100%;
+}
+
+/* ------------------------------ Result screen ----------------------------- */
+
+.lm-tt-result-inner{
+  max-width:860px;
+  margin:0 auto;
+  width:100%;
+}
+
+.lm-tt-result-title{
+  font-size:28px;
+}
+
+.lm-tt-score{
+  display:flex;
+  align-items:baseline;
+  gap:12px;
+  flex-wrap:wrap;
+  margin:16px 0 24px;
+  font-size:18px;
+}
+
+.lm-tt-score b{
+  font-size:30px;
+}
+
+.lm-tt-review-title{
+  margin-bottom:12px;
+}
+
+.lm-tt-review{
+  list-style:none;
+  display:grid;
+  gap:14px;
+}
+
+.lm-tt-review-item{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:18px 20px;
+}
+
+.lm-tt-review-q{
+  font-weight:700;
+  line-height:1.45;
+}
+
+.lm-tt-review-opts{
+  list-style:none;
+  display:grid;
+  gap:6px;
+  margin:12px 0;
+}
+
+.lm-tt-rev-opt{
+  padding:10px 12px;
+  border-radius:10px;
+  background:var(--card-2);
+  border:1px solid var(--border);
+  line-height:1.4;
+}
+
+.lm-tt-rev-opt.is-correct{
+  border-color:var(--brown);
+  background:var(--cream-soft);
+  font-weight:700;
+}
+
+.lm-tt-rev-opt.is-wrong{
+  border-color:var(--red);
+}
+
+.lm-tt-review-note{
+  color:var(--text-2);
+}
+
+.lm-tt-result-actions{
+  margin-top:20px;
+  display:flex;
+  justify-content:flex-end;
+}
+
+/* --------------------------- Type-select screen --------------------------- */
+
+.lm-tt-type{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:28px;
+}
+
+.lm-tt-type-title{
+  font-size:26px;
+  line-height:1.25;
+}
+
+.lm-tt-type-cards{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+  margin-top:20px;
+}
+
+.lm-tt-type-card{
+  text-align:left;
+  background:var(--card-2);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:22px;
+  cursor:pointer;
+  color:var(--text);
+  font:inherit;
+  transition:transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+
+.lm-tt-type-card:hover{
+  transform:translateY(-4px);
+  border-color:var(--brown);
+  box-shadow:0 16px 32px rgba(122, 47, 0, .18), 0 0 0 1px rgba(122, 47, 0, .08);
+}
+
+.lm-tt-type-card:focus-visible{
+  outline:2px solid var(--brown);
+  outline-offset:2px;
+}
+
+.lm-tt-type-card h3{
+  font-size:19px;
+  margin-bottom:6px;
+}
+
+.lm-tt-type-card p{
+  color:var(--text-2);
+  line-height:1.5;
+}
+
+.lm-tt-type-back{
+  margin-top:18px;
+}
+
+/* ------------------------------ Calendar picker --------------------------- */
+
+.lm-cal{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:24px;
+}
+
+.lm-cal-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.lm-cal-title{
+  font-size:20px;
+  margin-right:auto;
+}
+
+.lm-cal-select{
+  background:var(--card-2);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:8px 10px;
+  font:inherit;
+  cursor:pointer;
+}
+
+.lm-cal-navbtn{
+  width:36px;
+  height:36px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--card-2);
+  color:var(--text);
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.lm-cal-navbtn:hover{
+  border-color:var(--brown);
+}
+
+.lm-cal-week{
+  display:grid;
+  grid-template-columns:repeat(7, 1fr);
+  gap:6px;
+  margin-top:18px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  text-align:center;
+}
+
+.lm-cal-days{
+  display:grid;
+  grid-template-columns:repeat(7, 1fr);
+  gap:6px;
+  margin-top:6px;
+}
+
+.lm-cal-day{
+  aspect-ratio:1;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--card-2);
+  color:var(--text);
+  font:inherit;
+  font-weight:700;
+  cursor:pointer;
+  transition:border-color .2s ease, background .2s ease;
+}
+
+.lm-cal-day:hover:not(:disabled){
+  border-color:var(--brown);
+}
+
+.lm-cal-day:disabled{
+  opacity:.38;
+  cursor:not-allowed;
+}
+
+.lm-cal-day.is-today{
+  color:var(--brown);
+  font-weight:900;
+}
+
+.lm-cal-day.is-selected{
+  background:var(--brown);
+  color:var(--cream-soft);
+  border-color:var(--brown);
+}
+
+.lm-cal-day.is-selected.is-today{
+  color:var(--cream-soft);
+}
+
+.lm-cal-blank{
+  aspect-ratio:1;
+}
+
+.lm-cal-time{
+  display:flex;
+  gap:12px;
+  margin-top:18px;
+  flex-wrap:wrap;
+}
+
+.lm-cal-time label{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  font-size:13px;
+  color:var(--text-2);
+  font-weight:700;
+}
+
+.lm-cal-foot{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-top:18px;
+  flex-wrap:wrap;
+}
+
+.lm-cal-summary{
+  color:var(--text-2);
+}
+
+/* ------------------------------ Upcoming list ----------------------------- */
+
+.lm-upcoming-list{
+  display:grid;
+  gap:12px;
+}
+
+.lm-upcoming-card{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:18px 20px;
+}
+
+.lm-upcoming-title{
+  font-weight:800;
+  line-height:1.4;
+}
+
+.lm-upcoming-meta{
+  color:var(--text-2);
+  margin-top:4px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.lm-upcoming-pill{
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:800;
+}
+
+.lm-upcoming-pill.is-scheduled{
+  background:var(--cream-soft);
+  color:var(--brown);
+}
+
+.lm-upcoming-pill.is-available{
+  background:var(--brown);
+  color:var(--cream-soft);
+}
+
+.lm-upcoming-actions{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+/* ------------------------------ Responsive -------------------------------- */
+
+@media (max-width: 820px){
+
+  .lm-tt-body{
+    grid-template-columns:1fr;
+  }
+
+  .lm-tt-ring{
+    width:104px;
+    height:104px;
+  }
+
+  .lm-tt-ring-core{
+    width:76px;
+    height:76px;
+    font-size:17px;
+  }
+
+  .lm-tt-ring-knob{
+    transform-origin:50% 48px;
+  }
+
+  .lm-tt-qtext{
+    font-size:19px;
+  }
+
+  .lm-tt-type-cards{
+    grid-template-columns:1fr;
+  }
+
+  .lm-tt-dis-title{
+    font-size:25px;
+  }
+}
+/* ------------------------------ Tests list: spinner ----------------------- */
+
+.lm-spinner-wrap{
+  display:grid;
+  place-items:center;
+  padding:48px 0;
+}
+
+.lm-spinner{
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  border:4px solid var(--track);
+  border-top-color:var(--brown);
+  animation:lmSpin .8s linear infinite;
+}
+
+@keyframes lmSpin{to{transform:rotate(360deg)}}
+
+/* ------------------------------ Chapter picker ---------------------------- */
+
+.lm-chapter-list{
+  display:grid;
+  gap:10px;
+}
+
+.lm-chapter-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  text-align:left;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:16px 18px;
+  color:var(--text);
+  font:inherit;
+  font-weight:700;
+  cursor:pointer;
+  transition:border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.lm-chapter-row:hover{
+  border-color:var(--brown);
+  transform:translateY(-2px);
+  box-shadow:0 10px 20px rgba(122, 47, 0, .12);
+}
+
+.lm-chapter-row.is-selected{
+  border-color:var(--brown);
+  box-shadow:0 0 0 1px var(--brown);
+}
+
+.lm-chapter-row-title{
+  line-height:1.4;
+}
+
+/* ------------------------------ Completed score --------------------------- */
+
+.lm-completed-score{
+  font-weight:800;
+  font-size:18px;
+  color:var(--brown);
+}
+.lm .notif-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.lm .notif-head h4{margin:4px}
+.lm .notif-head .btn-cream{padding:6px 10px;font-size:12px}
+.lm .notif{cursor:pointer}
+.lm .notif.is-unread{border-left:3px solid var(--brown);background:var(--card-2)}
+.lm .lm-loading-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(26,16,8,.55);backdrop-filter:blur(3px);animation:fadeIn .18s ease}
+.lm .lm-loading-card{background:var(--card);border:1px solid var(--border);border-radius:20px;box-shadow:0 16px 48px rgba(74,30,0,.28);padding:32px 40px;text-align:center;max-width:min(320px,calc(100vw - 48px))}
+.lm .lm-loading-spinner{display:block;width:56px;height:56px;margin:0 auto 16px;border-width:5px}
+.lm .lm-loading-brand{font-weight:800;font-size:20px;color:var(--brown);letter-spacing:.2px}
+[data-theme="dark"] .lm .lm-loading-brand{color:var(--cream)}
+.lm .lm-loading-message{margin-top:8px;font-size:15px;color:var(--text)}
+.lm .lm-loading-sub{margin-top:4px;font-size:13px;color:var(--muted)}
+.lm .lesson-video{width:100%;height:100%;border:0;display:block}
 `;
+

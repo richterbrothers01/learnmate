@@ -26,6 +26,7 @@ import type { Schedule as LmSchedule } from "../../components/learnmate/Schedule
 import MilestonePath from "../../components/learnmate/MilestonePath";
 import TestTypeSelect from "../../components/learnmate/TestTypeSelect";
 import { resolveChapterVideo } from "../../lib/learnmate/resolveVideo";
+import LessonVideo from "../../components/learnmate/LessonVideo";
 import { usePushSubscription } from "../../lib/learnmate/usePushSubscription";
 
 type User = {
@@ -134,6 +135,8 @@ const STREAM_SUBJECTS: Record<string, string[]> = {
 
 
 type AnswerStat = { courseTitle: string; chapterTitle: string; correct: number; total: number };
+type LmVideoProgress = { percent: number; watched: number; duration: number };
+type LmHomeTest = { id: string; title: string; iso: string };
 
 
 function getCurriculumKey(course: Course): string {
@@ -158,6 +161,30 @@ function getCourseChapters(course: Course): CurriculumChapter[] {
     return CURRICULUM[`${course.classLevel}|${variant} Mathematics`] || [];
   }
   return [];
+}
+
+// Merge saved video progress into course progress. A course's
+// progress is the mean of its chapters' watched percentages
+// (unwatched chapters count as 0). If a course has no tracked
+// video at all, its existing (milestone) progress is kept.
+function lmMergeVideoProgress(
+  courses: Course[],
+  video: Record<string, LmVideoProgress>,
+): Course[] {
+  return courses.map((course) => {
+    const chapters = getCourseChapters(course);
+    if (!chapters.length) return course;
+    const key = getCurriculumKey(course);
+    let tracked = false;
+    let sum = 0;
+    chapters.forEach((chapter) => {
+      const p = video[`${key}|${chapter.section ?? ""}|${chapter.title}`];
+      if (p) tracked = true;
+      sum += p?.percent ?? 0;
+    });
+    if (!tracked) return course;
+    return { ...course, progress: Math.round(sum / chapters.length) };
+  });
 }
 
 function getWeekStart(date = new Date()): string {
@@ -885,13 +912,13 @@ export default function DashboardPage() {
 
   const [activeSection, setActiveSection] =
     useState<
-      | "dashboard"
-      | "courses"
-      | "ai"
-      | "tests"
-      | "quizzes"
-      | "milestones"
-    >(
+    | "dashboard"
+    | "courses"
+    | "ai"
+    | "tests"
+    | "quizzes"
+    | "milestones"
+  >(
       "dashboard",
     );
 
@@ -945,6 +972,9 @@ export default function DashboardPage() {
   const [weeklyStudySeconds, setWeeklyStudySeconds] = useState(0);
   const [answerStats, setAnswerStats] = useState<AnswerStat[]>([]);
   const [nextTestDate, setNextTestDate] = useState<string | null>(null);
+  const [lmVideoProgress, setLmVideoProgress] = useState<Record<string, LmVideoProgress>>({});
+  const [lmHomeUpcoming, setLmHomeUpcoming] = useState<LmHomeTest[]>([]);
+  const [lmHomeUpcomingTotal, setLmHomeUpcomingTotal] = useState(0);
 
 
   /* ==========================================================
@@ -1035,6 +1065,7 @@ export default function DashboardPage() {
       if (!authUser || !mounted) return;
 
       await loadCourses(authUser.id);
+      await lmRefreshVideoProgress();
     };
 
     initializeCourses();
@@ -1181,6 +1212,30 @@ export default function DashboardPage() {
       stream,
       mathVariant,
     };
+  };
+
+  // Best-effort fetch of saved video progress, merged into course
+  // progress. If the video_progress migration has not run yet the
+  // route errors and courses simply keep their old progress.
+  const lmRefreshVideoProgress = async () => {
+    try {
+      const res = await fetch("/api/video-progress");
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, LmVideoProgress> = {};
+      (Array.isArray(data?.progress) ? data.progress : []).forEach((row: any) => {
+        if (typeof row?.chapter_key !== "string") return;
+        map[row.chapter_key] = {
+          percent: Math.max(0, Math.min(100, Number(row.percent) || 0)),
+          watched: Math.max(0, Number(row.watched_seconds) || 0),
+          duration: Math.max(0, Number(row.duration_seconds) || 0),
+        };
+      });
+      setLmVideoProgress(map);
+      setCourses((prev) => lmMergeVideoProgress(prev, map));
+    } catch {
+      /* Video progress is optional until its migration runs. */
+    }
   };
 
   const loadCourses = async (
@@ -2597,13 +2652,13 @@ export default function DashboardPage() {
     }
   };
 
-  /* ==========================================================
-   LEARNMATE TESTS / QUIZZES / MILESTONES — WIRING (2026-10-26)
-   Sections wired to /api/tests, /api/quizzes, /api/schedules and
-   /api/chapters/resolve. Decisions: D1 one test/chapter (30 marks),
-   D2 pass 18, D3 tests in-memory only (TestTaker), D5 scheduling +
-   server expiry, D4 videos later via resolveVideo (null today).
-   ========================================================== */
+    /* ==========================================================
+     LEARNMATE TESTS / QUIZZES / MILESTONES — WIRING (2026-10-26)
+     Sections wired to /api/tests, /api/quizzes, /api/schedules and
+     /api/chapters/resolve. Decisions: D1 one test/chapter (30 marks),
+     D2 pass 18, D3 tests in-memory only (TestTaker), D5 scheduling +
+     server expiry, D4 videos later via resolveVideo (null today).
+     ========================================================== */
 
   type LmApiTest = {
     id: string;
@@ -2800,7 +2855,7 @@ export default function DashboardPage() {
     : [];
   const lmTestChapter =
     lmTestChapterIndex !== "" &&
-      lmTestChapters[Number(lmTestChapterIndex)]
+    lmTestChapters[Number(lmTestChapterIndex)]
       ? lmTestChapters[Number(lmTestChapterIndex)]
       : null;
 
@@ -2875,37 +2930,37 @@ export default function DashboardPage() {
 
   const lmStartTest = () =>
     lmWithLoading("Starting your test…", async () => {
-      if (!lmTestResolve?.test || !lmTestChapter) return;
-      setLmTestError(null);
-      try {
-        const res = await fetch(
-          `/api/tests/${lmTestResolve.test.id}/questions`,
-        );
-        if (!res.ok) throw new Error(await lmApiError(res));
-        const body = await res.json();
-        const questions: TestQuestion[] = [...(body.questions || [])]
-          .sort(
-            (a: any, b: any) => a.questionOrder - b.questionOrder,
-          )
-          .map((q: any) => ({
-            id: String(q.id),
-            text: String(q.questionText),
-            options: q.options as string[],
-          }));
-        setLmTestQuestions({
-          testId: String(body.test.id),
-          testTitle: String(body.test.title),
-          chapterTitle: lmTestChapter.title,
-          durationMinutes: body.test.durationMinutes ?? 30,
-          questions,
-        });
-      } catch (err) {
-        setLmTestError(
-          err instanceof Error
-            ? err.message
-            : "Could not start this test.",
-        );
-      }
+    if (!lmTestResolve?.test || !lmTestChapter) return;
+    setLmTestError(null);
+    try {
+      const res = await fetch(
+        `/api/tests/${lmTestResolve.test.id}/questions`,
+      );
+      if (!res.ok) throw new Error(await lmApiError(res));
+      const body = await res.json();
+      const questions: TestQuestion[] = [...(body.questions || [])]
+        .sort(
+          (a: any, b: any) => a.questionOrder - b.questionOrder,
+        )
+        .map((q: any) => ({
+          id: String(q.id),
+          text: String(q.questionText),
+          options: q.options as string[],
+        }));
+      setLmTestQuestions({
+        testId: String(body.test.id),
+        testTitle: String(body.test.title),
+        chapterTitle: lmTestChapter.title,
+        durationMinutes: body.test.durationMinutes ?? 30,
+        questions,
+      });
+    } catch (err) {
+      setLmTestError(
+        err instanceof Error
+          ? err.message
+          : "Could not start this test.",
+      );
+    }
     });
 
   // Start a scheduled test without any course: the schedule itself
@@ -2914,37 +2969,37 @@ export default function DashboardPage() {
   // shows first (TestTaker always starts on the disclaimer phase).
   const lmStartScheduledWithoutCourse = (item: LmUpcomingSchedule) =>
     lmWithLoading("Starting your test…", async () => {
-      try {
-        const res = await fetch(
-          `/api/tests/by-template/${item.templateChapterId}`,
-        );
-        if (!res.ok) throw new Error(await lmApiError(res));
-        const body = await res.json();
-        const qres = await fetch(`/api/tests/${body.test.id}/questions`);
-        if (!qres.ok) throw new Error(await lmApiError(qres));
-        const qbody = await qres.json();
-        const questions: TestQuestion[] = [...(qbody.questions || [])]
-          .sort((a: any, b: any) => a.questionOrder - b.questionOrder)
-          .map((q: any) => ({
-            id: String(q.id),
-            text: String(q.questionText),
-            options: q.options as string[],
-          }));
-        setLmTestQuestions({
-          testId: String(qbody.test.id),
-          testTitle: String(qbody.test.title),
-          chapterTitle: item.chapterTitle,
-          durationMinutes: qbody.test.durationMinutes ?? 30,
-          questions,
-        });
-      } catch (err) {
-        showToast(
-          err instanceof Error
-            ? err.message
-            : "Could not start this test.",
-          "error",
-        );
-      }
+    try {
+      const res = await fetch(
+        `/api/tests/by-template/${item.templateChapterId}`,
+      );
+      if (!res.ok) throw new Error(await lmApiError(res));
+      const body = await res.json();
+      const qres = await fetch(`/api/tests/${body.test.id}/questions`);
+      if (!qres.ok) throw new Error(await lmApiError(qres));
+      const qbody = await qres.json();
+      const questions: TestQuestion[] = [...(qbody.questions || [])]
+        .sort((a: any, b: any) => a.questionOrder - b.questionOrder)
+        .map((q: any) => ({
+          id: String(q.id),
+          text: String(q.questionText),
+          options: q.options as string[],
+        }));
+      setLmTestQuestions({
+        testId: String(qbody.test.id),
+        testTitle: String(qbody.test.title),
+        chapterTitle: item.chapterTitle,
+        durationMinutes: qbody.test.durationMinutes ?? 30,
+        questions,
+      });
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : "Could not start this test.",
+        "error",
+      );
+    }
     });
 
   const lmSubmitTest = (
@@ -2952,71 +3007,71 @@ export default function DashboardPage() {
     idempotencyKey: string,
   ): Promise<TestResult> =>
     lmWithLoading("Submitting your test…", async () => {
-      if (!lmTestQuestions) throw new Error("No test is loaded.");
-      const res = await fetch(
-        `/api/tests/${lmTestQuestions.testId}/submit`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers, idempotencyKey }),
-        },
-      );
-      if (!res.ok) throw new Error(await lmApiError(res));
-      const body = await res.json();
-      const byId = new Map(
-        lmTestQuestions.questions.map((q) => [q.id, q]),
-      );
-      return {
-        score: body.score,
-        totalMarks: body.totalMarks,
-        passingMarks: body.passingMarks,
-        passed: body.passed,
-        perQuestion: (body.results || []).map((r: any) => {
-          const q = byId.get(r.questionId);
-          return {
-            questionId: r.questionId,
-            text: q?.text ?? "",
-            options: q?.options ?? [],
-            selectedAnswer: r.submittedAnswer,
-            correctAnswer: r.correctAnswer,
-            isCorrect: r.isCorrect,
-            marksAwarded: r.marksAwarded,
-          };
-        }),
-      };
+    if (!lmTestQuestions) throw new Error("No test is loaded.");
+    const res = await fetch(
+      `/api/tests/${lmTestQuestions.testId}/submit`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers, idempotencyKey }),
+      },
+    );
+    if (!res.ok) throw new Error(await lmApiError(res));
+    const body = await res.json();
+    const byId = new Map(
+      lmTestQuestions.questions.map((q) => [q.id, q]),
+    );
+    return {
+      score: body.score,
+      totalMarks: body.totalMarks,
+      passingMarks: body.passingMarks,
+      passed: body.passed,
+      perQuestion: (body.results || []).map((r: any) => {
+        const q = byId.get(r.questionId);
+        return {
+          questionId: r.questionId,
+          text: q?.text ?? "",
+          options: q?.options ?? [],
+          selectedAnswer: r.submittedAnswer,
+          correctAnswer: r.correctAnswer,
+          isCorrect: r.isCorrect,
+          marksAwarded: r.marksAwarded,
+        };
+      }),
+    };
     });
 
   const lmCreateTestSchedule = (scheduledAtISO: string) =>
     lmWithLoading("Scheduling your test…", async () => {
-      if (!lmTestResolve)
-        throw new Error("Pick a course and chapter first.");
-      const res = await fetch("/api/schedules", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          templateChapterId: lmTestResolve.templateChapterId,
-          scheduledAt: scheduledAtISO,
-        }),
-      });
-      if (!res.ok) throw new Error(await lmApiError(res));
+    if (!lmTestResolve)
+      throw new Error("Pick a course and chapter first.");
+    const res = await fetch("/api/schedules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        templateChapterId: lmTestResolve.templateChapterId,
+        scheduledAt: scheduledAtISO,
+      }),
+    });
+    if (!res.ok) throw new Error(await lmApiError(res));
     });
 
   const lmDeleteCompleted = (id: string) =>
     lmWithLoading("Deleting your test…", async () => {
-      const res = await fetch(`/api/tests/attempts/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error(await lmApiError(res));
-      setLmConfirmDeleteAttemptId(null);
-      await lmRefreshCompleted();
+    const res = await fetch(`/api/tests/attempts/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error(await lmApiError(res));
+    setLmConfirmDeleteAttemptId(null);
+    await lmRefreshCompleted();
     });
 
   const lmCancelTestSchedule = (id: string) =>
     lmWithLoading("Cancelling your test…", async () => {
-      const res = await fetch(`/api/schedules/${id}/cancel`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error(await lmApiError(res));
+    const res = await fetch(`/api/schedules/${id}/cancel`, {
+      method: "POST",
+    });
+    if (!res.ok) throw new Error(await lmApiError(res));
     });
 
 
@@ -3212,7 +3267,7 @@ export default function DashboardPage() {
     : [];
   const lmQuizChapter =
     lmQuizChapterIndex !== "" &&
-      lmQuizChapters[Number(lmQuizChapterIndex)]
+    lmQuizChapters[Number(lmQuizChapterIndex)]
       ? lmQuizChapters[Number(lmQuizChapterIndex)]
       : null;
 
@@ -3401,8 +3456,8 @@ export default function DashboardPage() {
                 .in("milestone_id", milestoneIds);
               (
                 progress as
-                | { milestone_id: string; completed: boolean }[]
-                | null
+                  | { milestone_id: string; completed: boolean }[]
+                  | null
               )?.forEach((p) => {
                 if (p.completed) {
                   const t = milestoneToTitle.get(p.milestone_id);
@@ -3467,9 +3522,9 @@ export default function DashboardPage() {
     setSelectedChapter(chapter);
   };
 
-  /* ==========================================================
-       MARK 2 — NAVIGATION
-    ========================================================== */
+/* ==========================================================
+     MARK 2 — NAVIGATION
+  ========================================================== */
 
   const handleNavClick = (
     label: string,
@@ -3900,6 +3955,93 @@ export default function DashboardPage() {
       if (test) setNextTestDate(test);
     } catch { /* optional local Mark 3 stats */ }
   }, []);
+
+  // When a lesson closes, refresh course progress from saved video
+  // progress. The video's final flush can land just after unmount,
+  // so refetch once more shortly after close as well.
+  const lmPrevChapterRef = useRef<CurriculumChapter | null>(null);
+  useEffect(() => {
+    const wasOpen = lmPrevChapterRef.current !== null;
+    lmPrevChapterRef.current = selectedChapter;
+    if (wasOpen && selectedChapter === null) {
+      void lmRefreshVideoProgress();
+      const t = window.setTimeout(() => {
+        void lmRefreshVideoProgress();
+      }, 900);
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+  }, [selectedChapter]);
+
+  // Dashboard home data: live scheduled tests (soonest first) and
+  // best-per-chapter test results for Strong Topics / Needs
+  // Attention. Both replace localStorage values that were never
+  // written by any code path, which is why those sections stayed
+  // empty. If the attempts fetch comes back empty, the old
+  // localStorage stats (if any) are left in place.
+  useEffect(() => {
+    if (activeSection !== "dashboard") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/schedules");
+        if (res.ok) {
+          const data = await res.json();
+          const live = (Array.isArray(data?.schedules) ? data.schedules : []).filter(
+            (s: any) =>
+              (s.status === "scheduled" || s.status === "available") &&
+              !s.isExpired,
+          );
+          if (!cancelled) {
+            setLmHomeUpcomingTotal(live.length);
+            setLmHomeUpcoming(
+              live.slice(0, 3).map((s: any) => ({
+                id: s.id,
+                title: s.chapter?.title ?? "Test",
+                iso: s.scheduled_at,
+              })),
+            );
+          }
+        }
+      } catch {
+        /* Best-effort home data. */
+      }
+      try {
+        const res = await fetch("/api/tests/attempts");
+        if (res.ok) {
+          const data = await res.json();
+          const best = new Map<string, { title: string; section: string; score: number; total: number }>();
+          (Array.isArray(data?.attempts) ? data.attempts : []).forEach((a: any) => {
+            if (!a.chapterTitle || !a.totalMarks) return;
+            const prev = best.get(a.chapterTitle);
+            if (!prev || a.score / a.totalMarks > prev.score / prev.total) {
+              best.set(a.chapterTitle, {
+                title: a.chapterTitle,
+                section: a.section ?? "",
+                score: a.score,
+                total: a.totalMarks,
+              });
+            }
+          });
+          if (!cancelled && best.size > 0) {
+            setAnswerStats(
+              [...best.values()].map((b) => ({
+                chapterTitle: b.title,
+                courseTitle: b.section,
+                correct: b.score,
+                total: b.total,
+              })),
+            );
+          }
+        }
+      } catch {
+        /* Best-effort home data. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection]);
 
   /* ==========================================================
      MARK 5 — LEARNMATE AI (DOUBT CLEARER) LOGIC
@@ -4991,11 +5133,11 @@ export default function DashboardPage() {
                       <section className="perf3 reveal d4 mark3-topic-grid" aria-label="Topic accuracy">
                         <div className="card pad">
                           <h3>⭐ Strong Topics</h3>
-                          {strongestTopic ? <div className="topic-result"><b>{strongestTopic.chapterTitle}</b><span>{strongestTopic.courseTitle}</span><strong>{Math.round(strongestTopic.correct / strongestTopic.total * 100)}% correct</strong></div> : <div className="empty-section">Chapter accuracy will appear after you answer questions.</div>}
+                          {strongestTopic ? <div className="topic-result"><b>{strongestTopic.chapterTitle}</b>{strongestTopic.courseTitle ? <span>{strongestTopic.courseTitle}</span> : null}<strong>{Math.round(strongestTopic.correct / strongestTopic.total * 100)}% correct</strong></div> : <div className="empty-section">Chapter accuracy will appear after you answer questions.</div>}
                         </div>
                         <div className="card pad needs-attention-card">
                           <h3 className="warn-title">⚠️ Needs Attention</h3>
-                          {weakestTopic ? <div className="topic-result"><b>{weakestTopic.chapterTitle}</b><span>{weakestTopic.courseTitle}</span><strong>{Math.round(weakestTopic.correct / weakestTopic.total * 100)}% correct</strong></div> : <div className="empty-section">Your lowest-accuracy chapter will appear here after you answer questions.</div>}
+                          {weakestTopic ? <div className="topic-result"><b>{weakestTopic.chapterTitle}</b>{weakestTopic.courseTitle ? <span>{weakestTopic.courseTitle}</span> : null}<strong>{Math.round(weakestTopic.correct / weakestTopic.total * 100)}% correct</strong></div> : <div className="empty-section">Your lowest-accuracy chapter will appear here after you answer questions.</div>}
                         </div>
                       </section>
 
@@ -5014,20 +5156,35 @@ export default function DashboardPage() {
                             href="#"
                             onClick={(e) => {
                               e.preventDefault();
-
-                              showToast(
-                                "This Feature will be added in MARK3 Update",
-                                "error",
-                              );
+                              setActiveSection("tests");
+                              sessionStorage.setItem("learnmate-active-section", "tests");
+                              setLmTestView("list");
+                              setLmTestTab("upcoming");
                             }}
                           >
                             View all →
                           </a>
                         </div>
 
-                        <div className="empty-section">
-                          {nextTestDate ? `Next test: ${new Date(`${nextTestDate}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}` : "No upcoming test scheduled"}
-                        </div>
+                                                {lmHomeUpcoming.length > 0 ? (
+                          <>
+                            <div className="lm-home-tests">
+                              {lmHomeUpcoming.map((t) => (
+                                <button key={t.id} type="button" className="lm-home-test" onClick={() => { setActiveSection("tests"); sessionStorage.setItem("learnmate-active-section", "tests"); setLmTestView("list"); setLmTestTab("upcoming"); }}>
+                                  <span className="lm-home-test-title">{t.title}</span>
+                                  <span className="lm-home-test-date">{new Date(t.iso).toLocaleString()}</span>
+                                </button>
+                              ))}
+                            </div>
+                            {lmHomeUpcomingTotal > lmHomeUpcoming.length && (
+                              <div className="lm-home-test-more">and {lmHomeUpcomingTotal - lmHomeUpcoming.length} more scheduled</div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="empty-section">
+                            {nextTestDate ? `Next test: ${new Date(`${nextTestDate}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}` : "No upcoming test scheduled"}
+                          </div>
+                        )}
                       </section>
                     </div>
                   </div>
@@ -5616,19 +5773,27 @@ export default function DashboardPage() {
                           const yt = videoSrc.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
                           if (yt) {
                             return (
-                              <iframe
-                                className="lesson-video"
-                                src={`https://www.youtube-nocookie.com/embed/${yt[1]}`}
-                                title={selectedChapter.title}
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
+                              <LessonVideo
+                                videoId={yt[1]}
+                                chapterKey={lessonKey}
+                                initialSeconds={lmVideoProgress[lessonKey]?.watched ?? 0}
+                                onProgress={(percent, watched, duration) => {
+                                  setLmVideoProgress((prev) => ({
+                                    ...prev,
+                                    [lessonKey]: { percent, watched, duration },
+                                  }));
+                                }}
                               />
                             );
                           }
                           return <video controls playsInline src={videoSrc} />;
                         })()}
                       </div>
-                      <aside className="lesson-details"><span className="lesson-eyebrow">NOW LEARNING</span><h2>{selectedChapter.title}</h2><p>Follow the lesson at your own pace.</p><button type="button" className="btn-brown" onClick={() => setSelectedChapter(null)}>All Chapters <span>→</span></button></aside>
+                      <aside className="lesson-details"><span className="lesson-eyebrow">NOW LEARNING</span><h2>{selectedChapter.title}</h2><p>Follow the lesson at your own pace.</p>{(() => {
+                          const k = `${getCurriculumKey(selectedCourse)}|${selectedChapter.section ?? ""}|${selectedChapter.title}`;
+                          const p = lmVideoProgress[k]?.percent ?? 0;
+                          return p > 0 ? (<p className="lm-lesson-watched">Watched {p}% of this video</p>) : null;
+                        })()}<button type="button" className="btn-brown" onClick={() => setSelectedChapter(null)}>All Chapters <span>→</span></button></aside>
                     </div>
                   </section>
                 )}
@@ -12496,5 +12661,11 @@ body{
 .lm .lm-loading-message{margin-top:8px;font-size:15px;color:var(--text)}
 .lm .lm-loading-sub{margin-top:4px;font-size:13px;color:var(--muted)}
 .lm .lesson-video{width:100%;height:100%;border:0;display:block}
+.lm .lm-home-tests{display:flex;flex-direction:column;gap:8px}
+.lm .lm-home-test{display:flex;justify-content:space-between;align-items:baseline;gap:12px;width:100%;text-align:left;background:var(--card-2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;color:var(--text);font:inherit}
+.lm .lm-home-test-title{font-weight:700}
+.lm .lm-home-test-date{color:var(--muted);font-size:13px;white-space:nowrap}
+.lm .lm-home-test-more{margin-top:8px;font-size:13px;color:var(--muted)}
+.lm .lm-lesson-watched{margin-top:8px;font-size:13px;color:var(--muted)}
 `;
 

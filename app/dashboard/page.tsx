@@ -333,6 +333,52 @@ function useTypewriter(
   return displayed;
 }
 
+// Animates a number from its previous value to the new one
+// (ease-out cubic), so a progress figure visibly counts up from 0
+// on first load and rolls to the new value whenever it changes.
+// Respects prefers-reduced-motion by jumping straight to the value.
+function useCountUp(value: number, durationMs = 1400): number {
+  const [display, setDisplay] = useState(0);
+  const displayRef = useRef(0);
+
+  useEffect(() => {
+    const reduced = window
+      .matchMedia("(prefers-reduced-motion: reduce)")
+      .matches;
+    const from = displayRef.current;
+
+    if (reduced || from === value) {
+      displayRef.current = value;
+      setDisplay(value);
+      return;
+    }
+
+    let raf = 0;
+    const start = performance.now();
+
+    const tick = (time: number) => {
+      const progress = Math.min(1, (time - start) / durationMs);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = from + (value - from) * eased;
+
+      displayRef.current = current;
+      setDisplay(current);
+
+      if (progress < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        displayRef.current = value;
+        setDisplay(value);
+      }
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, durationMs]);
+
+  return display;
+}
+
 function ProgressRing({
   value,
   animate,
@@ -843,11 +889,40 @@ export default function DashboardPage() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (
+        window.localStorage.getItem("learnmate-sidebar-collapsed") ===
+        "1"
+      ) {
+        setSidebarCollapsed(true);
+      }
+    } catch {
+      /* Storage unavailable: start expanded. */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "learnmate-sidebar-collapsed",
+        sidebarCollapsed ? "1" : "0",
+      );
+    } catch {
+      /* Persistence is a nicety, not a requirement. */
+    }
+  }, [sidebarCollapsed]);
   const [settingsView, setSettingsView] =
     useState<SettingsView>("main");
 
   const [theme, setTheme] =
     useState<"light" | "dark">("light");
+
+  const themePeriodRef = useRef("");
+  const themeManualRef = useRef(false);
 
   const [nameDraft, setNameDraft] = useState("");
   const [emailDraft, setEmailDraft] = useState("");
@@ -912,13 +987,14 @@ export default function DashboardPage() {
 
   const [activeSection, setActiveSection] =
     useState<
-    | "dashboard"
-    | "courses"
-    | "ai"
-    | "tests"
-    | "quizzes"
-    | "milestones"
-  >(
+      | "dashboard"
+      | "courses"
+      | "ai"
+      | "tests"
+      | "quizzes"
+      | "milestones"
+      | "analytics"
+    >(
       "dashboard",
     );
 
@@ -1036,6 +1112,8 @@ export default function DashboardPage() {
       setActiveSection("quizzes");
     } else if (savedSection === "milestones") {
       setActiveSection("milestones");
+    } else if (savedSection === "analytics") {
+      setActiveSection("analytics");
     } else {
       setActiveSection("dashboard");
     }
@@ -1623,7 +1701,11 @@ export default function DashboardPage() {
       ? ongoingCourses
       : completedCourses;
 
-  const mostCompletedCourse = [...courses].sort((a, b) => b.progress - a.progress)[0] || null;
+  const mostCompletedCourse =
+    [...ongoingCourses].sort((a, b) => b.progress - a.progress)[0] ||
+    [...completedCourses].sort((a, b) => b.progress - a.progress)[0] ||
+    null;
+  const continueProgress = useCountUp(mostCompletedCourse?.progress ?? 0);
   const selectedCourse = courses.find(course => course.id === selectedCourseId) || null;
   const selectedCourseChapters = selectedCourse ? getCourseChapters(selectedCourse) : [];
   const strongestTopic = answerStats.filter(x => x.total > 0).sort((a, b) => (b.correct / b.total) - (a.correct / a.total))[0] || null;
@@ -1885,22 +1967,29 @@ export default function DashboardPage() {
   ========================================================== */
 
   useEffect(() => {
-    const saved =
-      localStorage.getItem(
-        "learnmate-theme",
-      ) as "light" | "dark" | null;
+    const periodOf = (d: Date) =>
+      `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours() < 12 ? "AM" : "PM"
+      }`;
 
-    if (saved) {
-      setTheme(saved);
-    } else if (
-      window
-        .matchMedia(
-          "(prefers-color-scheme: dark)",
-        )
-        .matches
-    ) {
-      setTheme("dark");
-    }
+    const applyTimeTheme = () => {
+      const now = new Date();
+      const period = periodOf(now);
+
+      if (themePeriodRef.current !== period) {
+        themePeriodRef.current = period;
+        themeManualRef.current = false;
+      }
+
+      if (themeManualRef.current) return;
+
+      setTheme(now.getHours() >= 12 ? "dark" : "light");
+    };
+
+    applyTimeTheme();
+
+    const timer = window.setInterval(applyTimeTheme, 30000);
+
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -2232,6 +2321,8 @@ export default function DashboardPage() {
   ========================================================== */
 
   const toggleTheme = () => {
+    themeManualRef.current = true;
+
     setTheme((current) => {
       const next =
         current === "dark"
@@ -2652,13 +2743,13 @@ export default function DashboardPage() {
     }
   };
 
-    /* ==========================================================
-     LEARNMATE TESTS / QUIZZES / MILESTONES — WIRING (2026-10-26)
-     Sections wired to /api/tests, /api/quizzes, /api/schedules and
-     /api/chapters/resolve. Decisions: D1 one test/chapter (30 marks),
-     D2 pass 18, D3 tests in-memory only (TestTaker), D5 scheduling +
-     server expiry, D4 videos later via resolveVideo (null today).
-     ========================================================== */
+  /* ==========================================================
+   LEARNMATE TESTS / QUIZZES / MILESTONES — WIRING (2026-10-26)
+   Sections wired to /api/tests, /api/quizzes, /api/schedules and
+   /api/chapters/resolve. Decisions: D1 one test/chapter (30 marks),
+   D2 pass 18, D3 tests in-memory only (TestTaker), D5 scheduling +
+   server expiry, D4 videos later via resolveVideo (null today).
+   ========================================================== */
 
   type LmApiTest = {
     id: string;
@@ -2742,6 +2833,8 @@ export default function DashboardPage() {
     templateChapterId: string;
     scheduledAtISO: string;
     status: string;
+    windowEndsAtISO: string;
+    isExpired: boolean;
     chapterTitle: string;
     section: string | null;
   };
@@ -2758,6 +2851,11 @@ export default function DashboardPage() {
   const [lmUpcomingLoading, setLmUpcomingLoading] = useState(false);
   const [lmCompleted, setLmCompleted] = useState<LmCompletedTest[]>([]);
   const [lmCompletedLoading, setLmCompletedLoading] = useState(false);
+  const [lmAnWeek, setLmAnWeek] = useState<{ date: string; seconds: number }[]>([]);
+  const [lmAnTotalSeconds, setLmAnTotalSeconds] = useState(0);
+  const [lmAnBestStreak, setLmAnBestStreak] = useState(0);
+  const [lmAnReady, setLmAnReady] = useState(false);
+  const [lmAnGo, setLmAnGo] = useState(false);
   const [lmConfirmDeleteAttemptId, setLmConfirmDeleteAttemptId] = useState<string | null>(null);
   const lmChapterPickedRef = useRef(false);
 
@@ -2774,6 +2872,8 @@ export default function DashboardPage() {
           templateChapterId: String(s.template_chapter_id),
           scheduledAtISO: String(s.scheduled_at),
           status: String(s.status),
+          windowEndsAtISO: String(s.windowEndsAt ?? ""),
+          isExpired: Boolean(s.isExpired),
           chapterTitle: String(s.chapter?.title ?? "Untitled chapter"),
           section: s.chapter?.section ?? null,
         })),
@@ -2810,9 +2910,248 @@ export default function DashboardPage() {
     }
   };
 
-  const lmUpcomingLive = lmUpcoming.filter(
-    (s) => s.status === "scheduled" || s.status === "available",
+
+  /* ---------- Analytics: derived from real attempts / courses ---------- */
+  const lmAnShow =
+    activeSection === "analytics" && lmAnReady && !lmCompletedLoading;
+  const lmAnAvg30 = lmCompleted.length
+    ? lmCompleted.reduce(
+      (s, a) => s + (a.totalMarks > 0 ? (a.score / a.totalMarks) * 30 : 0),
+      0,
+    ) / lmCompleted.length
+    : 0;
+  const lmAnPassedCount = lmCompleted.filter((a) => a.passed).length;
+  const lmAnChart = [...lmCompleted].slice(0, 7).reverse();
+  const lmAnChartPts = lmAnChart.map((a, i) => {
+    const score30 = a.totalMarks > 0 ? (a.score / a.totalMarks) * 30 : 0;
+    return {
+      x:
+        lmAnChart.length > 1
+          ? 20 + (520 * i) / (lmAnChart.length - 1)
+          : 280,
+      y: 168 - (Math.min(30, score30) / 30) * 148,
+      score: Math.round(score30),
+    };
+  });
+  const lmAnLine = lmAnChartPts
+    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(" ");
+  const lmAnArea =
+    lmAnChartPts.length > 1
+      ? `${lmAnLine} L${lmAnChartPts[lmAnChartPts.length - 1].x.toFixed(1)},168 L${lmAnChartPts[0].x.toFixed(1)},168 Z`
+      : "";
+  const lmAnPassY = 168 - (18 / 30) * 148;
+  const lmAnBestByChapter = new Map<string, LmCompletedTest>();
+  for (const a of lmCompleted) {
+    const cur = lmAnBestByChapter.get(a.chapterTitle);
+    if (!cur || a.score / a.totalMarks > cur.score / cur.totalMarks)
+      lmAnBestByChapter.set(a.chapterTitle, a);
+  }
+  const lmAnRanked = Array.from(lmAnBestByChapter.values()).sort(
+    (x, y) => y.score / y.totalMarks - x.score / x.totalMarks,
   );
+  const lmAnStrong = lmAnRanked
+    .filter((a) => a.totalMarks > 0 && a.score / a.totalMarks >= 0.6)
+    .slice(0, 2);
+  const lmAnWeak = [...lmAnRanked]
+    .reverse()
+    .filter((a) => a.totalMarks > 0 && a.score / a.totalMarks < 0.6)
+    .slice(0, 2);
+  const lmAnSubjects = (() => {
+    const m = new Map<string, { sum: number; n: number }>();
+    for (const c of courses) {
+      const e = m.get(c.subject) ?? { sum: 0, n: 0 };
+      e.sum += c.progress;
+      e.n += 1;
+      m.set(c.subject, e);
+    }
+    return Array.from(m.entries())
+      .map(([subject, e]) => ({ subject, pct: Math.round(e.sum / e.n) }))
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 5);
+  })();
+  const lmAnWeekDays = (() => {
+    const start = parseDateString(getWeekStart());
+    const byDate = new Map(lmAnWeek.map((r) => [r.date, r.seconds]));
+    const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const todayStr = getLocalDateString(new Date());
+    return names.map((name, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const ds = getLocalDateString(d);
+      return {
+        name,
+        minutes: Math.round((byDate.get(ds) ?? 0) / 60),
+        isToday: ds === todayStr,
+      };
+    });
+  })();
+  const lmAnWeekMax = Math.max(1, ...lmAnWeekDays.map((d) => d.minutes));
+  const lmAnWeekTotal = lmAnWeekDays.reduce((s, d) => s + d.minutes, 0);
+  const lmAnT = useCountUp(lmAnGo ? 100 : 0, 1900) / 100;
+  const lmAnOverallAnim = useCountUp(
+    lmAnGo ? (mostCompletedCourse?.progress ?? 0) : 0,
+    1700,
+  );
+  const lmAnStreakAnim = useCountUp(lmAnGo ? streakDays : 0, 1700);
+  const lmAnAvgAnim = useCountUp(lmAnGo ? lmAnAvg30 : 0, 1700);
+  const lmAnTimeAnim = useCountUp(lmAnGo ? lmAnTotalSeconds : 0, 1700);
+
+  // Schedule phase from the clock: a scheduled test opens at its
+  // scheduled time and can be started for 30 minutes. Before that it
+  // is upcoming; after the window it is missed, whatever the stored
+  // status still says (the row flips to missed lazily, server-side).
+  const lmSchedulePhase = (
+    s: LmUpcomingSchedule,
+  ): "upcoming" | "open" | "missed" => {
+    if (s.status === "missed") return "missed";
+    if (s.status !== "scheduled" && s.status !== "available")
+      return "missed";
+    const start = new Date(s.scheduledAtISO).getTime();
+    const end = s.windowEndsAtISO
+      ? new Date(s.windowEndsAtISO).getTime()
+      : start + 30 * 60 * 1000;
+    const now = Date.now();
+    if (Number.isNaN(start) || Number.isNaN(end) || now > end)
+      return "missed";
+    return now < start ? "upcoming" : "open";
+  };
+
+  const lmUpcomingLive = lmUpcoming.filter(
+    (s) =>
+      (s.status === "scheduled" || s.status === "available") &&
+      lmSchedulePhase(s) !== "missed",
+  );
+  const lmUpcomingMissed = lmUpcoming.filter(
+    (s) =>
+      (s.status === "scheduled" ||
+        s.status === "available" ||
+        s.status === "missed") &&
+      lmSchedulePhase(s) === "missed",
+  );
+
+  // Open-window prompt: when a scheduled test's 30-minute start
+  // window is open, opening the app shows a prompt naming the test
+  // with a forced choice — Start test or Cancel test. One prompt at
+  // a time (the window that closes soonest first, since schedules
+  // arrive ordered by scheduled time). A schedule handled here is
+  // not prompted again this page session, even if the student backs
+  // out of the started test without submitting.
+  const [lmOpenPromptId, setLmOpenPromptId] = useState<string | null>(null);
+  const [lmRedoCourse, setLmRedoCourse] =
+    useState<Course | null>(null);
+  const lmPromptHandledRef = useRef<Set<string>>(new Set());
+  const lmOpenPromptItem = lmOpenPromptId
+    ? lmUpcoming.find((s) => s.id === lmOpenPromptId) ?? null
+    : null;
+  const lmPromptHeading = lmOpenPromptItem
+    ? `Your test for ${lmOpenPromptItem.chapterTitle} has started.`
+    : "";
+  const lmPromptTyped = useTypewriter(
+    lmPromptHeading,
+    45,
+    Boolean(lmOpenPromptItem),
+  );
+
+  useEffect(() => {
+    if (lmOpenPromptId) {
+      // The schedule vanished (cancelled or completed elsewhere):
+      // close the prompt instead of pointing at nothing.
+      if (!lmUpcoming.some((s) => s.id === lmOpenPromptId)) {
+        setLmOpenPromptId(null);
+      }
+      return;
+    }
+    if (lmTestQuestions) return;
+    const open = lmUpcoming.find(
+      (s) =>
+        (s.status === "scheduled" || s.status === "available") &&
+        lmSchedulePhase(s) === "open" &&
+        !lmPromptHandledRef.current.has(s.id),
+    );
+    if (open) setLmOpenPromptId(open.id);
+  }, [lmUpcoming, lmTestQuestions, lmOpenPromptId]);
+
+  const lmPromptStart = () => {
+    const item = lmOpenPromptItem;
+    if (!item) return;
+    lmPromptHandledRef.current.add(item.id);
+    setLmOpenPromptId(null);
+    setActiveSection("tests");
+    sessionStorage.setItem("learnmate-active-section", "tests");
+    lmStartUpcoming(item);
+  };
+
+  const lmPromptCancel = async () => {
+    const item = lmOpenPromptItem;
+    if (!item) return;
+    lmPromptHandledRef.current.add(item.id);
+    setLmOpenPromptId(null);
+    try {
+      await lmCancelTestSchedule(item.id);
+      showToast("Test cancelled.", "success");
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : "Could not cancel this test.",
+        "error",
+      );
+    }
+    await lmRefreshUpcoming();
+  };
+
+  /* Redo a completed course: clear its saved video progress so it returns
+     to Ongoing at 0%. Past test attempts are kept. */
+  const lmRedoConfirm = async () => {
+    const course = lmRedoCourse;
+    if (!course) return;
+    setLmRedoCourse(null);
+
+    await lmWithLoading("Resetting your course…", async () => {
+      try {
+        const curriculumKey = getCurriculumKey(course);
+        const chapterKeys = getCourseChapters(course).map(
+          (chapter) =>
+            `${curriculumKey}|${chapter.section ?? ""}|${chapter.title}`,
+        );
+
+        const res = await fetch("/api/video-progress", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chapterKeys }),
+        });
+
+        if (!res.ok) throw new Error("reset failed");
+
+        await lmRefreshVideoProgress();
+
+        setAddOpen(false);
+        setAddClosing(false);
+        setSelectedClass(null);
+        setSelectedStream(null);
+        setSelectedSubject(null);
+        setSelectedCompulsorySubject(null);
+        setSelectedMathVariant(null);
+        setActiveSection("courses");
+        sessionStorage.setItem(
+          "learnmate-active-section",
+          "courses",
+        );
+        setCourseTab("ongoing");
+        setSelectedCourseId(course.id);
+        showToast(
+          "Course reset — it is back in your ongoing courses.",
+          "success",
+        );
+      } catch {
+        showToast(
+          "Could not reset this course. Please try again.",
+          "error",
+        );
+      }
+    });
+  };
 
   // Start from Upcoming: the schedule itself pins the exact chapter
   // (templateChapterId), so there is nothing to match against courses.
@@ -2855,7 +3194,7 @@ export default function DashboardPage() {
     : [];
   const lmTestChapter =
     lmTestChapterIndex !== "" &&
-    lmTestChapters[Number(lmTestChapterIndex)]
+      lmTestChapters[Number(lmTestChapterIndex)]
       ? lmTestChapters[Number(lmTestChapterIndex)]
       : null;
 
@@ -2930,37 +3269,37 @@ export default function DashboardPage() {
 
   const lmStartTest = () =>
     lmWithLoading("Starting your test…", async () => {
-    if (!lmTestResolve?.test || !lmTestChapter) return;
-    setLmTestError(null);
-    try {
-      const res = await fetch(
-        `/api/tests/${lmTestResolve.test.id}/questions`,
-      );
-      if (!res.ok) throw new Error(await lmApiError(res));
-      const body = await res.json();
-      const questions: TestQuestion[] = [...(body.questions || [])]
-        .sort(
-          (a: any, b: any) => a.questionOrder - b.questionOrder,
-        )
-        .map((q: any) => ({
-          id: String(q.id),
-          text: String(q.questionText),
-          options: q.options as string[],
-        }));
-      setLmTestQuestions({
-        testId: String(body.test.id),
-        testTitle: String(body.test.title),
-        chapterTitle: lmTestChapter.title,
-        durationMinutes: body.test.durationMinutes ?? 30,
-        questions,
-      });
-    } catch (err) {
-      setLmTestError(
-        err instanceof Error
-          ? err.message
-          : "Could not start this test.",
-      );
-    }
+      if (!lmTestResolve?.test || !lmTestChapter) return;
+      setLmTestError(null);
+      try {
+        const res = await fetch(
+          `/api/tests/${lmTestResolve.test.id}/questions`,
+        );
+        if (!res.ok) throw new Error(await lmApiError(res));
+        const body = await res.json();
+        const questions: TestQuestion[] = [...(body.questions || [])]
+          .sort(
+            (a: any, b: any) => a.questionOrder - b.questionOrder,
+          )
+          .map((q: any) => ({
+            id: String(q.id),
+            text: String(q.questionText),
+            options: q.options as string[],
+          }));
+        setLmTestQuestions({
+          testId: String(body.test.id),
+          testTitle: String(body.test.title),
+          chapterTitle: lmTestChapter.title,
+          durationMinutes: body.test.durationMinutes ?? 30,
+          questions,
+        });
+      } catch (err) {
+        setLmTestError(
+          err instanceof Error
+            ? err.message
+            : "Could not start this test.",
+        );
+      }
     });
 
   // Start a scheduled test without any course: the schedule itself
@@ -2969,37 +3308,37 @@ export default function DashboardPage() {
   // shows first (TestTaker always starts on the disclaimer phase).
   const lmStartScheduledWithoutCourse = (item: LmUpcomingSchedule) =>
     lmWithLoading("Starting your test…", async () => {
-    try {
-      const res = await fetch(
-        `/api/tests/by-template/${item.templateChapterId}`,
-      );
-      if (!res.ok) throw new Error(await lmApiError(res));
-      const body = await res.json();
-      const qres = await fetch(`/api/tests/${body.test.id}/questions`);
-      if (!qres.ok) throw new Error(await lmApiError(qres));
-      const qbody = await qres.json();
-      const questions: TestQuestion[] = [...(qbody.questions || [])]
-        .sort((a: any, b: any) => a.questionOrder - b.questionOrder)
-        .map((q: any) => ({
-          id: String(q.id),
-          text: String(q.questionText),
-          options: q.options as string[],
-        }));
-      setLmTestQuestions({
-        testId: String(qbody.test.id),
-        testTitle: String(qbody.test.title),
-        chapterTitle: item.chapterTitle,
-        durationMinutes: qbody.test.durationMinutes ?? 30,
-        questions,
-      });
-    } catch (err) {
-      showToast(
-        err instanceof Error
-          ? err.message
-          : "Could not start this test.",
-        "error",
-      );
-    }
+      try {
+        const res = await fetch(
+          `/api/tests/by-template/${item.templateChapterId}`,
+        );
+        if (!res.ok) throw new Error(await lmApiError(res));
+        const body = await res.json();
+        const qres = await fetch(`/api/tests/${body.test.id}/questions`);
+        if (!qres.ok) throw new Error(await lmApiError(qres));
+        const qbody = await qres.json();
+        const questions: TestQuestion[] = [...(qbody.questions || [])]
+          .sort((a: any, b: any) => a.questionOrder - b.questionOrder)
+          .map((q: any) => ({
+            id: String(q.id),
+            text: String(q.questionText),
+            options: q.options as string[],
+          }));
+        setLmTestQuestions({
+          testId: String(qbody.test.id),
+          testTitle: String(qbody.test.title),
+          chapterTitle: item.chapterTitle,
+          durationMinutes: qbody.test.durationMinutes ?? 30,
+          questions,
+        });
+      } catch (err) {
+        showToast(
+          err instanceof Error
+            ? err.message
+            : "Could not start this test.",
+          "error",
+        );
+      }
     });
 
   const lmSubmitTest = (
@@ -3007,71 +3346,71 @@ export default function DashboardPage() {
     idempotencyKey: string,
   ): Promise<TestResult> =>
     lmWithLoading("Submitting your test…", async () => {
-    if (!lmTestQuestions) throw new Error("No test is loaded.");
-    const res = await fetch(
-      `/api/tests/${lmTestQuestions.testId}/submit`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers, idempotencyKey }),
-      },
-    );
-    if (!res.ok) throw new Error(await lmApiError(res));
-    const body = await res.json();
-    const byId = new Map(
-      lmTestQuestions.questions.map((q) => [q.id, q]),
-    );
-    return {
-      score: body.score,
-      totalMarks: body.totalMarks,
-      passingMarks: body.passingMarks,
-      passed: body.passed,
-      perQuestion: (body.results || []).map((r: any) => {
-        const q = byId.get(r.questionId);
-        return {
-          questionId: r.questionId,
-          text: q?.text ?? "",
-          options: q?.options ?? [],
-          selectedAnswer: r.submittedAnswer,
-          correctAnswer: r.correctAnswer,
-          isCorrect: r.isCorrect,
-          marksAwarded: r.marksAwarded,
-        };
-      }),
-    };
+      if (!lmTestQuestions) throw new Error("No test is loaded.");
+      const res = await fetch(
+        `/api/tests/${lmTestQuestions.testId}/submit`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers, idempotencyKey }),
+        },
+      );
+      if (!res.ok) throw new Error(await lmApiError(res));
+      const body = await res.json();
+      const byId = new Map(
+        lmTestQuestions.questions.map((q) => [q.id, q]),
+      );
+      return {
+        score: body.score,
+        totalMarks: body.totalMarks,
+        passingMarks: body.passingMarks,
+        passed: body.passed,
+        perQuestion: (body.results || []).map((r: any) => {
+          const q = byId.get(r.questionId);
+          return {
+            questionId: r.questionId,
+            text: q?.text ?? "",
+            options: q?.options ?? [],
+            selectedAnswer: r.submittedAnswer,
+            correctAnswer: r.correctAnswer,
+            isCorrect: r.isCorrect,
+            marksAwarded: r.marksAwarded,
+          };
+        }),
+      };
     });
 
   const lmCreateTestSchedule = (scheduledAtISO: string) =>
     lmWithLoading("Scheduling your test…", async () => {
-    if (!lmTestResolve)
-      throw new Error("Pick a course and chapter first.");
-    const res = await fetch("/api/schedules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        templateChapterId: lmTestResolve.templateChapterId,
-        scheduledAt: scheduledAtISO,
-      }),
-    });
-    if (!res.ok) throw new Error(await lmApiError(res));
+      if (!lmTestResolve)
+        throw new Error("Pick a course and chapter first.");
+      const res = await fetch("/api/schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateChapterId: lmTestResolve.templateChapterId,
+          scheduledAt: scheduledAtISO,
+        }),
+      });
+      if (!res.ok) throw new Error(await lmApiError(res));
     });
 
   const lmDeleteCompleted = (id: string) =>
     lmWithLoading("Deleting your test…", async () => {
-    const res = await fetch(`/api/tests/attempts/${id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) throw new Error(await lmApiError(res));
-    setLmConfirmDeleteAttemptId(null);
-    await lmRefreshCompleted();
+      const res = await fetch(`/api/tests/attempts/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(await lmApiError(res));
+      setLmConfirmDeleteAttemptId(null);
+      await lmRefreshCompleted();
     });
 
   const lmCancelTestSchedule = (id: string) =>
     lmWithLoading("Cancelling your test…", async () => {
-    const res = await fetch(`/api/schedules/${id}/cancel`, {
-      method: "POST",
-    });
-    if (!res.ok) throw new Error(await lmApiError(res));
+      const res = await fetch(`/api/schedules/${id}/cancel`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error(await lmApiError(res));
     });
 
 
@@ -3187,6 +3526,49 @@ export default function DashboardPage() {
     ];
     for (const s of lmUpcoming) {
       if (s.status !== "scheduled" && s.status !== "available") continue;
+      const startMs = new Date(s.scheduledAtISO).getTime();
+      const endMs = s.windowEndsAtISO
+        ? new Date(s.windowEndsAtISO).getTime()
+        : startMs + 30 * 60 * 1000;
+      const nowMs = Date.now();
+      // The window has opened: one "started" notification per schedule.
+      if (!Number.isNaN(startMs) && nowMs >= startMs && nowMs <= endMs) {
+        try {
+          await fetch("/api/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "test-started",
+              title: "Your test has started",
+              body: `Your test for ${s.chapterTitle} is open now — you can start it until ${new Date(endMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`,
+              key: `started:${s.id}`,
+              link: "tests",
+            }),
+          });
+        } catch {
+          /* Bell is secondary; ignore. */
+        }
+      }
+      // The window has closed with no submission: the test is missed.
+      // Skipped while any test is on screen — a student mid-test is
+      // not missing it; the check runs again once the test closes.
+      if (!Number.isNaN(endMs) && nowMs > endMs && !lmTestQuestions) {
+        try {
+          await fetch("/api/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "test-missed",
+              title: "You missed your test",
+              body: `Your test for ${s.chapterTitle} was scheduled for ${new Date(s.scheduledAtISO).toLocaleString()} and its start window has closed. You can schedule it again from Tests.`,
+              key: `missed:${s.id}`,
+              link: "tests",
+            }),
+          });
+        } catch {
+          /* Bell is secondary; ignore. */
+        }
+      }
       const until = new Date(s.scheduledAtISO).getTime() - Date.now();
       if (until <= 0 || until > windows[0].ms) continue;
       for (const w of windows) {
@@ -3267,7 +3649,7 @@ export default function DashboardPage() {
     : [];
   const lmQuizChapter =
     lmQuizChapterIndex !== "" &&
-    lmQuizChapters[Number(lmQuizChapterIndex)]
+      lmQuizChapters[Number(lmQuizChapterIndex)]
       ? lmQuizChapters[Number(lmQuizChapterIndex)]
       : null;
 
@@ -3384,8 +3766,9 @@ export default function DashboardPage() {
   const [lmMilestoneCourseId, setLmMilestoneCourseId] =
     useState<string>("");
   const [lmMilestoneChapters, setLmMilestoneChapters] = useState<
-    { id: string; title: string; completed: boolean }[]
+    { id: string; title: string; watched: boolean; watchPercent: number }[]
   >([]);
+  const [lmMsDropdownOpen, setLmMsDropdownOpen] = useState(false);
   const [lmMilestoneLoading, setLmMilestoneLoading] = useState(false);
   const [lmMilestoneError, setLmMilestoneError] = useState<string | null>(
     null,
@@ -3404,93 +3787,51 @@ export default function DashboardPage() {
   ): string =>
     `${getCurriculumKey(course)}|${chapter.section ?? ""}|${chapter.title}`;
 
+  // Milestone chapters come straight from the curriculum plus the
+  // student's real video watch progress: a chapter counts as
+  // watched when any of its video has been watched (percent > 0).
+  // No separate milestone tables are involved anymore.
   useEffect(() => {
     const course = courses.find((c) => c.id === lmMilestoneCourseId);
     if (!course) {
       setLmMilestoneChapters([]);
       setLmMilestoneError(null);
+      setLmMilestoneLoading(false);
       return;
     }
-    const chapters = getCourseChapters(course);
-    let cancelled = false;
-    setLmMilestoneLoading(true);
     setLmMilestoneError(null);
-    (async () => {
-      try {
-        // Completion overlay is best-effort: per-user chapters /
-        // milestones rows may not exist yet (course creation only
-        // writes a courses row). Missing rows mean "not completed" —
-        // completion is never faked on the client.
-        const completedTitles = new Set<string>();
-        const {
-          data: { user: authUser },
-        } = await supabase.auth.getUser();
-        if (authUser) {
-          const { data: dbChapters } = await supabase
-            .from("chapters")
-            .select("id,title")
-            .eq("course_id", course.id);
-          if (dbChapters?.length) {
-            const rows = dbChapters as { id: string; title: string }[];
-            const titleByChapterId = new Map(
-              rows.map((c) => [c.id, c.title]),
-            );
-            const chapterIds = rows.map((c) => c.id);
-            const { data: ms } = await supabase
-              .from("milestones")
-              .select("id,chapter_id")
-              .in("chapter_id", chapterIds);
-            if (ms?.length) {
-              const mrows = ms as { id: string; chapter_id: string }[];
-              const milestoneIds = mrows.map((m) => m.id);
-              const milestoneToTitle = new Map(
-                mrows.map((m) => [
-                  m.id,
-                  titleByChapterId.get(m.chapter_id) ?? "",
-                ]),
-              );
-              const { data: progress } = await supabase
-                .from("milestone_progress")
-                .select("milestone_id,completed")
-                .eq("user_id", authUser.id)
-                .in("milestone_id", milestoneIds);
-              (
-                progress as
-                  | { milestone_id: string; completed: boolean }[]
-                  | null
-              )?.forEach((p) => {
-                if (p.completed) {
-                  const t = milestoneToTitle.get(p.milestone_id);
-                  if (t) completedTitles.add(t);
-                }
-              });
-            }
-          }
-        }
-        if (cancelled) return;
-        setLmMilestoneChapters(
-          chapters.map((ch) => ({
-            id: lmMilestoneKey(course, ch),
-            title: ch.title,
-            completed: completedTitles.has(ch.title),
-          })),
-        );
-        setLmMilestoneLoading(false);
-      } catch (err) {
-        if (!cancelled) {
-          setLmMilestoneError(
-            err instanceof Error
-              ? err.message
-              : "Could not load this learning path.",
-          );
-          setLmMilestoneLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [lmMilestoneCourseId, courses]);
+    setLmMilestoneLoading(false);
+    setLmMilestoneChapters(
+      getCourseChapters(course).map((ch) => {
+        const key = lmMilestoneKey(course, ch);
+        const p = lmVideoProgress[key];
+        return {
+          id: key,
+          title: ch.title,
+          watched: (p?.percent ?? 0) > 0,
+          watchPercent: p?.percent ?? 0,
+        };
+      }),
+    );
+  }, [lmMilestoneCourseId, courses, lmVideoProgress]);
+
+  // Default the milestone course to the ongoing course with the
+  // highest progress whenever nothing valid is picked.
+  useEffect(() => {
+    if (lmOngoingCourses.length === 0) return;
+    if (lmOngoingCourses.some((c) => c.id === lmMilestoneCourseId)) return;
+    const best = [...lmOngoingCourses].sort(
+      (a, b) => b.progress - a.progress,
+    )[0];
+    setLmMilestoneCourseId(best.id);
+  }, [lmOngoingCourses, lmMilestoneCourseId]);
+
+  // Fresh watch progress whenever the Milestones section opens, so
+  // a video watched a moment ago lights up straight away.
+  useEffect(() => {
+    if (activeSection === "milestones") void lmRefreshVideoProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection]);
 
   const lmHandleMilestoneWatch = (course: Course, chapterId: string) => {
     // Defense-in-depth gate: MilestonePath already refuses to call this
@@ -3522,9 +3863,9 @@ export default function DashboardPage() {
     setSelectedChapter(chapter);
   };
 
-/* ==========================================================
-     MARK 2 — NAVIGATION
-  ========================================================== */
+  /* ==========================================================
+       MARK 2 — NAVIGATION
+    ========================================================== */
 
   const handleNavClick = (
     label: string,
@@ -3597,11 +3938,122 @@ export default function DashboardPage() {
       return;
     }
 
+    if (label === "Analytics") {
+      setActiveSection("analytics");
+      setAddOpen(false);
+      setAddClosing(false);
+
+      sessionStorage.setItem(
+        "learnmate-active-section",
+        "analytics",
+      );
+
+      return;
+    }
+
     showToast(
       "This Feature will be added in MARK3 Update",
       "error",
     );
   };
+
+
+  /* Analytics data: attempts refresh + study time + streak history. */
+  useEffect(() => {
+    if (activeSection !== "analytics") return;
+    let cancelled = false;
+    setLmAnReady(false);
+    void lmRefreshCompleted();
+    (async () => {
+      try {
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+        if (!authUser) {
+          if (!cancelled) setLmAnReady(true);
+          return;
+        }
+        const weekStart = getWeekStart();
+        const today = getLocalDateString(new Date());
+        const [weekRes, totalRes, streakRes] = await Promise.all([
+          supabase
+            .from("study_time_logs")
+            .select("activity_date,seconds_studied")
+            .eq("user_id", authUser.id)
+            .gte("activity_date", weekStart)
+            .lte("activity_date", today),
+          supabase
+            .from("study_time_logs")
+            .select("seconds_studied")
+            .eq("user_id", authUser.id),
+          supabase
+            .from("study_streaks")
+            .select("activity_date")
+            .eq("user_id", authUser.id)
+            .order("activity_date", { ascending: true }),
+        ]);
+        if (cancelled) return;
+        if (!weekRes.error)
+          setLmAnWeek(
+            (weekRes.data ?? []).map((r: any) => ({
+              date: String(r.activity_date),
+              seconds: Math.max(0, Number(r.seconds_studied) || 0),
+            })),
+          );
+        if (!totalRes.error)
+          setLmAnTotalSeconds(
+            (totalRes.data ?? []).reduce(
+              (s: number, r: any) =>
+                s + Math.max(0, Number(r.seconds_studied) || 0),
+              0,
+            ),
+          );
+        if (!streakRes.error) {
+          const dates = Array.from(
+            new Set(
+              (streakRes.data ?? []).map((r: any) =>
+                String(r.activity_date),
+              ),
+            ),
+          ).sort();
+          let best = 0;
+          let run = 0;
+          let prev: Date | null = null;
+          for (const d of dates) {
+            const cur = parseDateString(d);
+            if (
+              prev &&
+              Math.round(
+                (cur.getTime() - prev.getTime()) / 86400000,
+              ) === 1
+            )
+              run += 1;
+            else run = 1;
+            best = Math.max(best, run);
+            prev = cur;
+          }
+          setLmAnBestStreak(best);
+        }
+      } catch {
+        /* Whatever loaded stays; empty states are honest. */
+      }
+      if (!cancelled) setLmAnReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection]);
+
+  /* Start the analytics loaders just after the cards begin to
+     de-blur, so the 0-to-value motion is clearly visible. */
+  useEffect(() => {
+    if (!lmAnShow) {
+      setLmAnGo(false);
+      return;
+    }
+    const t = window.setTimeout(() => setLmAnGo(true), 300);
+    return () => window.clearTimeout(t);
+  }, [lmAnShow]);
 
   /* ==========================================================
      MARK 2 — ADD COURSE
@@ -3756,6 +4208,15 @@ export default function DashboardPage() {
       }
 
       if (existingCourse) {
+        const doneCourse = courses.find(
+          (course) => course.id === existingCourse.id,
+        );
+
+        if (doneCourse && doneCourse.progress >= 100) {
+          setLmRedoCourse(doneCourse);
+          return;
+        }
+
         showToast(
           "You’ve already added this course.",
           "error",
@@ -4467,14 +4928,19 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Load history each time the student opens Doubt Clearer.
+  // Load history each time the student opens Doubt Clearer. The
+  // password gate unlocks AFTER the section is already active, so the
+  // load must also fire when aiUnlocked flips to true — with
+  // [activeSection] alone, unlocking never retriggered it and the
+  // previous chats only appeared after the first sent message
+  // refreshed the list as a side effect.
   useEffect(() => {
     if (activeSection !== "ai" || !aiUnlocked) return;
 
     void aiLoadChats();
     aiFocusComposer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection]);
+  }, [activeSection, aiUnlocked]);
 
   // Keep the glow animating until its fade-out has finished.
   useEffect(() => {
@@ -4611,7 +5077,11 @@ export default function DashboardPage() {
           aria-hidden="true"
         />
 
-        <div className="app">
+        <div
+          className={
+            sidebarCollapsed ? "app sidebar-collapsed" : "app"
+          }
+        >
           {/* SIDEBAR */}
 
           <aside
@@ -4653,11 +5123,16 @@ export default function DashboardPage() {
                   (activeSection ===
                     "ai" &&
                     item.label ===
-                    "Doubt Clearer");
+                    "Doubt Clearer") ||
+                  (activeSection ===
+                    "analytics" &&
+                    item.label ===
+                    "Analytics");
                 return (
                   <button
                     key={item.label}
                     type="button"
+                    title={item.label}
                     className={
                       active
                         ? "nav-link active"
@@ -4677,7 +5152,7 @@ export default function DashboardPage() {
                       {item.emoji}
                     </span>
 
-                    <span>
+                    <span className="nav-label">
                       {item.label}
                     </span>
                   </button>
@@ -4686,6 +5161,8 @@ export default function DashboardPage() {
             </nav>
 
             <div className="side-foot">
+
+
               <button
                 type="button"
                 onClick={openSettings}
@@ -4696,7 +5173,9 @@ export default function DashboardPage() {
                   ⚙️
                 </span>
 
-                Settings
+                <span className="side-foot-label">
+                  Settings
+                </span>
               </button>
 
               <button
@@ -4736,7 +5215,10 @@ export default function DashboardPage() {
                   </small>
                 </span>
 
-                <span aria-hidden="true">
+                <span
+                  className="profile-chevron"
+                  aria-hidden="true"
+                >
                   ›
                 </span>
               </button>
@@ -4755,6 +5237,22 @@ export default function DashboardPage() {
               </nav>
             </div>
           </aside>
+          <button
+            type="button"
+            className="lm-edge-toggle"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            aria-label={
+              sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+            }
+            aria-expanded={!sidebarCollapsed}
+            title={
+              sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+            }
+          >
+            <span aria-hidden="true">
+              {sidebarCollapsed ? "»" : "«"}
+            </span>
+          </button>
 
           <main className={activeSection === "ai" ? "main ai-mode" : "main"}>
             {/* TOPBAR */}
@@ -4792,30 +5290,34 @@ export default function DashboardPage() {
 
               <div className="top-actions">
                 <div className="desktop-theme-toggle">
-                  <button
-                    type="button"
-                    className="theme-switch"
-                    role="switch"
-                    aria-checked={
-                      theme === "dark"
-                    }
-                    aria-label="Toggle dark mode"
-                    onClick={toggleTheme}
-                  >
-                    <span className="theme-orb">
-                      {theme ===
-                        "dark"
-                        ? "☾"
-                        : "☀"}
-                    </span>
+                  <div className="lm-dn">
+                    <input
+                      className="lm-dn-input"
+                      id="lm-dn-toggle"
+                      type="checkbox"
+                      checked={theme === "dark"}
+                      onChange={toggleTheme}
+                      aria-label="Toggle dark mode"
+                    />
 
-                    <span className="theme-label">
-                      {theme ===
-                        "dark"
-                        ? "Dark"
-                        : "Light"}
-                    </span>
-                  </button>
+                    <label
+                      className="lm-dn-toggle"
+                      htmlFor="lm-dn-toggle"
+                    >
+                      <span className="lm-dn-handler">
+                        <span className="lm-dn-crater lm-dn-crater--1"></span>
+                        <span className="lm-dn-crater lm-dn-crater--2"></span>
+                        <span className="lm-dn-crater lm-dn-crater--3"></span>
+                      </span>
+
+                      <span className="lm-dn-star lm-dn-star--1"></span>
+                      <span className="lm-dn-star lm-dn-star--2"></span>
+                      <span className="lm-dn-star lm-dn-star--3"></span>
+                      <span className="lm-dn-star lm-dn-star--4"></span>
+                      <span className="lm-dn-star lm-dn-star--5"></span>
+                      <span className="lm-dn-star lm-dn-star--6"></span>
+                    </label>
+                  </div>
                 </div>
 
                 <button
@@ -5113,8 +5615,8 @@ export default function DashboardPage() {
                               <div className="hero-info">
                                 <h3>{mostCompletedCourse.subject}{mostCompletedCourse.mathVariant ? ` (${mostCompletedCourse.mathVariant})` : ""}</h3>
                                 <p>{mostCompletedCourse.class}{mostCompletedCourse.stream ? ` · ${mostCompletedCourse.stream}` : ""}</p>
-                                <div className="bar"><i style={{ width: `${mostCompletedCourse.progress}%` }} /></div>
-                                <div className="hero-meta"><span>{mostCompletedCourse.progress >= 100 ? "Course completed" : "Continue where you left off"}</span><span className="pct">{mostCompletedCourse.progress}%</span></div>
+                                <div className="bar"><i style={{ width: `${continueProgress}%` }} /></div>
+                                <div className="hero-meta"><span>{mostCompletedCourse.progress >= 100 ? "Course completed" : "Continue where you left off"}</span><span className="pct">{Math.round(continueProgress)}%</span></div>
                               </div>
                               <button type="button" className="btn-cream" onClick={() => { setActiveSection("courses"); sessionStorage.setItem("learnmate-active-section", "courses"); setSelectedCourseId(mostCompletedCourse.id); setSelectedChapter(null); }}>
                                 {mostCompletedCourse.progress >= 100 ? "Review Course" : "Continue Learning"} <span>→</span>
@@ -5166,7 +5668,7 @@ export default function DashboardPage() {
                           </a>
                         </div>
 
-                                                {lmHomeUpcoming.length > 0 ? (
+                        {lmHomeUpcoming.length > 0 ? (
                           <>
                             <div className="lm-home-tests">
                               {lmHomeUpcoming.map((t) => (
@@ -5790,10 +6292,10 @@ export default function DashboardPage() {
                         })()}
                       </div>
                       <aside className="lesson-details"><span className="lesson-eyebrow">NOW LEARNING</span><h2>{selectedChapter.title}</h2><p>Follow the lesson at your own pace.</p>{(() => {
-                          const k = `${getCurriculumKey(selectedCourse)}|${selectedChapter.section ?? ""}|${selectedChapter.title}`;
-                          const p = lmVideoProgress[k]?.percent ?? 0;
-                          return p > 0 ? (<p className="lm-lesson-watched">Watched {p}% of this video</p>) : null;
-                        })()}<button type="button" className="btn-brown" onClick={() => setSelectedChapter(null)}>All Chapters <span>→</span></button></aside>
+                        const k = `${getCurriculumKey(selectedCourse)}|${selectedChapter.section ?? ""}|${selectedChapter.title}`;
+                        const p = lmVideoProgress[k]?.percent ?? 0;
+                        return p > 0 ? (<p className="lm-lesson-watched">Watched {p}% of this video</p>) : null;
+                      })()}<button type="button" className="btn-brown" onClick={() => setSelectedChapter(null)}>All Chapters <span>→</span></button></aside>
                     </div>
                   </section>
                 )}
@@ -6571,48 +7073,91 @@ export default function DashboardPage() {
                               <div className="lm-spinner-wrap" role="status" aria-label="Loading upcoming tests">
                                 <span className="lm-spinner" aria-hidden="true" />
                               </div>
-                            ) : lmUpcomingLive.length === 0 ? (
+                            ) : lmUpcomingLive.length === 0 && lmUpcomingMissed.length === 0 ? (
                               <div className="empty-section">No tests scheduled yet. Press “Add test”, pick a course and chapter, then “Schedule the test”.</div>
                             ) : (
                               <div className="lm-upcoming-list">
-                                {lmUpcomingLive.map((s) => (
-                                  <div key={s.id} className="lm-upcoming-card">
-                                    <div>
-                                      <p className="lm-upcoming-title">
-                                        {s.chapterTitle}
-                                        {s.section ? ` — ${s.section}` : ""}
-                                      </p>
-                                      <p className="lm-upcoming-meta">
-                                        <span>{new Date(s.scheduledAtISO).toLocaleString()}</span>
-                                        <span
-                                          className={`lm-upcoming-pill ${s.status === "available" ? "is-available" : "is-scheduled"}`}
+                                {lmUpcomingLive.map((s) => {
+                                  const phase = lmSchedulePhase(s); const startMs = new Date(s.scheduledAtISO).getTime(); const endMs = s.windowEndsAtISO ? new Date(s.windowEndsAtISO).getTime() : startMs + 30 * 60 * 1000; return (
+                                    <div key={s.id} className="lm-upcoming-card">
+                                      <div>
+                                        <p className="lm-upcoming-title">
+                                          {s.chapterTitle}
+                                          {s.section ? ` — ${s.section}` : ""}
+                                        </p>
+                                        <p className="lm-upcoming-meta">
+                                          <span>{new Date(s.scheduledAtISO).toLocaleString()}</span>
+                                          <span
+                                            className={`lm-upcoming-pill ${phase === "open" ? "is-available" : "is-scheduled"}`}
+                                          >
+                                            {phase === "open" ? "Open now" : "Scheduled"}
+                                          </span>
+                                          <span>
+                                            {phase === "open"
+                                              ? `Start by ${new Date(endMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                                              : `Opens ${new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
+                                          </span>
+                                        </p>
+                                      </div>
+                                      <div className="lm-upcoming-actions">
+                                        <button
+                                          type="button"
+                                          className="btn-brown"
+                                          disabled={phase === "upcoming"}
+                                          onClick={() => lmStartUpcoming(s)}
                                         >
-                                          {s.status === "available" ? "Available now" : "Scheduled"}
-                                        </span>
-                                      </p>
+                                          Start test
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn-cream"
+                                          onClick={async () => {
+                                            await lmCancelTestSchedule(s.id);
+                                            await lmRefreshUpcoming();
+                                          }}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
                                     </div>
-                                    <div className="lm-upcoming-actions">
-                                      <button
-                                        type="button"
-                                        className="btn-brown"
-                                        onClick={() => lmStartUpcoming(s)}
-                                      >
-                                        Start test
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="btn-cream"
-                                        onClick={async () => {
-                                          await lmCancelTestSchedule(s.id);
-                                          await lmRefreshUpcoming();
-                                        }}
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
+                            )}
+                            {!lmUpcomingLoading && lmUpcomingMissed.length > 0 && (
+                              <>
+                                <div className="courses-section-head">
+                                  <div>
+                                    <h2>Missed tests</h2>
+                                    <p>Their start windows have closed — schedule them again to take them</p>
+                                  </div>
+                                </div>
+                                <div className="lm-upcoming-list">
+                                  {lmUpcomingMissed.map((s) => (
+                                    <div key={s.id} className="lm-upcoming-card">
+                                      <div>
+                                        <p className="lm-upcoming-title">
+                                          {s.chapterTitle}
+                                          {s.section ? ` — ${s.section}` : ""}
+                                        </p>
+                                        <p className="lm-upcoming-meta">
+                                          <span>{new Date(s.scheduledAtISO).toLocaleString()}</span>
+                                          <span className="lm-upcoming-pill is-missed">Missed</span>
+                                        </p>
+                                      </div>
+                                      <div className="lm-upcoming-actions">
+                                        <button
+                                          type="button"
+                                          className="btn-brown"
+                                          onClick={() => setLmTestView("pick-course")}
+                                        >
+                                          Schedule again
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
                             )}
                           </>
                         ) : (
@@ -6787,31 +7332,92 @@ export default function DashboardPage() {
                 <div className="courses-heading-row">
                   <div className="courses-heading-copy">
                     <h1 className="h1">Milestones</h1>
-                    <p className="sub">One path per ongoing course. Every milestone is a chapter, in order. Watching a video never marks a chapter complete.</p>
+                    <p className="sub">One path per ongoing course. Every milestone is a chapter, in order — and a milestone lights up once you have watched its video.</p>
                   </div>
                 </div>
                 {lmOngoingCourses.length === 0 ? (
                   <div className="empty-section">No ongoing courses yet. Add a course, and its chapter path will appear here.</div>
                 ) : (
                   <>
-                    <div className="lm-picker-row">
-                      <label className="lm-picker-label">
-                        Course
-                        <select
-                          value={lmMilestoneCourseId}
-                          onChange={(e) => {
-                            setLmMilestoneCourseId(e.target.value);
-                            setLmMilestoneNotice(null);
-                          }}
+                    <div className="lm-msdd">
+                      <span className="lm-msdd-label">Course</span>
+                      <div className="lm-msdd-wrap">
+                        <button
+                          type="button"
+                          className="lm-msdd-btn"
+                          aria-haspopup="listbox"
+                          aria-expanded={lmMsDropdownOpen}
+                          onClick={() => setLmMsDropdownOpen((o) => !o)}
                         >
-                          <option value="">Choose a course…</option>
-                          {lmOngoingCourses.map((course) => (
-                            <option key={course.id} value={course.id}>
-                              {course.class} · {course.subject} ({course.progress}%)
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                          <span className="lm-msdd-btn-text">
+                            {lmMilestoneCourse
+                              ? `${lmMilestoneCourse.class} · ${lmMilestoneCourse.subject}`
+                              : "Choose a course…"}
+                          </span>
+                          {lmMilestoneCourse && (
+                            <span className="lm-msdd-btn-pct">
+                              {lmMilestoneCourse.progress}%
+                            </span>
+                          )}
+                          <span
+                            className={`lm-msdd-chevron${lmMsDropdownOpen ? " open" : ""}`}
+                            aria-hidden="true"
+                          >
+                            ▾
+                          </span>
+                        </button>
+                        {lmMsDropdownOpen && (
+                          <>
+                            <button
+                              type="button"
+                              className="lm-msdd-scrim"
+                              aria-hidden="true"
+                              tabIndex={-1}
+                              onClick={() => setLmMsDropdownOpen(false)}
+                            />
+                            <ul
+                              className="lm-msdd-list"
+                              role="listbox"
+                              aria-label="Choose a course"
+                            >
+                              {lmOngoingCourses.map((course) => (
+                                <li key={course.id}>
+                                  <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={
+                                      course.id === lmMilestoneCourseId
+                                    }
+                                    className={`lm-msdd-item${course.id === lmMilestoneCourseId ? " selected" : ""}`}
+                                    onClick={() => {
+                                      setLmMilestoneCourseId(course.id);
+                                      setLmMilestoneNotice(null);
+                                      setLmMsDropdownOpen(false);
+                                    }}
+                                  >
+                                    <span className="lm-msdd-item-main">
+                                      {course.class} · {course.subject}
+                                      {course.mathVariant
+                                        ? ` (${course.mathVariant})`
+                                        : ""}
+                                    </span>
+                                    <span className="lm-msdd-item-bar">
+                                      <i
+                                        style={{
+                                          width: `${course.progress}%`,
+                                        }}
+                                      />
+                                    </span>
+                                    <span className="lm-msdd-item-pct">
+                                      {course.progress}%
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </div>
                     </div>
                     {lmMilestoneNotice && (
                       <p className="lm-error" role="alert">{lmMilestoneNotice}</p>
@@ -6827,6 +7433,373 @@ export default function DashboardPage() {
                         error={lmMilestoneError}
                       />
                     )}
+                  </>
+                )}
+              </section>
+            )}
+
+            {activeSection === "analytics" && (
+              <section className="lm-an reveal">
+                <h1>Analytics</h1>
+                <p className="sub">
+                  Your learning at a glance — see how your tests,
+                  videos and study time are adding up.
+                </p>
+
+                {!lmAnShow ? (
+                  <div className="lm-spinner-wrap">
+                    <div className="lm-spinner" />
+                    <p>Loading your analytics…</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="lm-an-stats">
+                      <div
+                        className="lm-an-card lm-an-blur"
+                        style={{ animationDelay: "0ms" }}
+                      >
+                        <div className="lm-an-k">Overall progress</div>
+                        <div className="lm-an-v">
+                          {Math.round(lmAnOverallAnim)}%
+                        </div>
+                        <div className="lm-an-d">
+                          {mostCompletedCourse
+                            ? `Best course: ${mostCompletedCourse.title}`
+                            : "Add a course to begin"}
+                        </div>
+                      </div>
+
+                      <div
+                        className="lm-an-card lm-an-blur"
+                        style={{ animationDelay: "60ms" }}
+                      >
+                        <div className="lm-an-k">Study streak</div>
+                        <div className="lm-an-v">
+                          {Math.round(lmAnStreakAnim)}{" "}
+                          <small>days</small>
+                        </div>
+                        <div className="lm-an-d">
+                          {lmAnBestStreak > 0
+                            ? `Your best: ${lmAnBestStreak} days`
+                            : "Study today to start a streak"}
+                        </div>
+                      </div>
+
+                      <div
+                        className="lm-an-card lm-an-blur"
+                        style={{ animationDelay: "120ms" }}
+                      >
+                        <div className="lm-an-k">Study time</div>
+                        <div className="lm-an-v">
+                          {formatStudyTime(Math.round(lmAnTimeAnim))}
+                        </div>
+                        <div className="lm-an-d">
+                          {`This week: ${formatStudyTime(weeklyStudySeconds)}`}
+                        </div>
+                      </div>
+
+                      <div
+                        className="lm-an-card lm-an-blur"
+                        style={{ animationDelay: "180ms" }}
+                      >
+                        <div className="lm-an-k">Average test score</div>
+                        <div className="lm-an-v">
+                          {Math.round(lmAnAvgAnim)}
+                          <small>/30</small>
+                        </div>
+                        <div className="lm-an-d">
+                          {lmCompleted.length
+                            ? `${lmCompleted.length} tests taken · ${lmAnPassedCount} passed`
+                            : "No tests taken yet"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="lm-an-grid">
+                      <div
+                        className="lm-an-card lm-an-blur"
+                        style={{ animationDelay: "240ms" }}
+                      >
+                        <h3>Test performance</h3>
+                        <p className="lm-an-hint">
+                          Your recent test scores — the dashed line is
+                          the pass mark (18/30).
+                        </p>
+                        {lmAnChart.length === 0 ? (
+                          <p className="lm-an-empty">
+                            Take a test and your score graph will
+                            appear here.
+                          </p>
+                        ) : (
+                          <svg
+                            className="lm-an-chart"
+                            viewBox="0 0 560 190"
+                            width="100%"
+                            role="img"
+                            aria-label="Recent test scores"
+                          >
+                            <defs>
+                              <linearGradient
+                                id="lmAnArea"
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                              >
+                                <stop
+                                  offset="0%"
+                                  stopColor="#E9C689"
+                                  stopOpacity=".38"
+                                />
+                                <stop
+                                  offset="100%"
+                                  stopColor="#E9C689"
+                                  stopOpacity=".02"
+                                />
+                              </linearGradient>
+                            </defs>
+                            <line
+                              x1="10"
+                              y1={lmAnPassY}
+                              x2="550"
+                              y2={lmAnPassY}
+                              stroke="#D92D20"
+                              strokeWidth="1.4"
+                              strokeDasharray="5 5"
+                            />
+                            <text
+                              x="548"
+                              y={lmAnPassY - 8}
+                              textAnchor="end"
+                              fontSize="11"
+                              fontWeight="700"
+                              className="lm-an-pass-label"
+                              fill="#D92D20"
+                            >
+                              Pass mark 18
+                            </text>
+                            {lmAnArea && (
+                              <path
+                                d={lmAnArea}
+                                fill="url(#lmAnArea)"
+                                opacity={lmAnT}
+                              />
+                            )}
+                            {lmAnChartPts.length > 1 && (
+                              <path
+                                d={lmAnLine}
+                                fill="none"
+                                className="lm-an-line"
+                                strokeWidth="2.6"
+                                strokeLinecap="round"
+                                pathLength={100}
+                                strokeDasharray={100}
+                                strokeDashoffset={100 * (1 - lmAnT)}
+                              />
+                            )}
+                            {lmAnChartPts.map((p, i) => (
+                              <g key={i} opacity={lmAnT}>
+                                <circle
+                                  cx={p.x}
+                                  cy={p.y}
+                                  r="5"
+                                  className="lm-an-pt"
+                                  strokeWidth="2.4"
+                                />
+                                <text
+                                  x={p.x}
+                                  y={p.y - 12}
+                                  textAnchor="middle"
+                                  fontSize="12"
+                                  fontWeight="800"
+                                  className="lm-an-pt-label"
+                                >
+                                  {p.score}
+                                </text>
+                              </g>
+                            ))}
+                          </svg>
+                        )}
+                      </div>
+
+                      <div
+                        className="lm-an-card lm-an-blur"
+                        style={{ animationDelay: "300ms" }}
+                      >
+                        <h3>Topics</h3>
+                        <p className="lm-an-hint">
+                          From your best attempt in each chapter.
+                        </p>
+                        {lmAnRanked.length === 0 ? (
+                          <p className="lm-an-empty">
+                            Take a test and your strong and
+                            needs-attention topics will show up here.
+                          </p>
+                        ) : (
+                          <>
+                            {lmAnStrong.length > 0 && (
+                              <>
+                                <div className="lm-an-lbl">
+                                  💪 Strong topics
+                                </div>
+                                {lmAnStrong.map((a) => (
+                                  <div
+                                    className="lm-an-topic"
+                                    key={a.id}
+                                  >
+                                    <span>{a.chapterTitle}</span>
+                                    <span className="lm-an-score">
+                                      {a.score}/{a.totalMarks}
+                                    </span>
+                                  </div>
+                                ))}
+                              </>
+                            )}
+                            {lmAnWeak.length > 0 && (
+                              <>
+                                <div className="lm-an-lbl">
+                                  🎯 Needs attention
+                                </div>
+                                {lmAnWeak.map((a) => (
+                                  <div
+                                    className="lm-an-topic"
+                                    key={a.id}
+                                  >
+                                    <span>{a.chapterTitle}</span>
+                                    <span className="lm-an-score">
+                                      {a.score}/{a.totalMarks}
+                                    </span>
+                                  </div>
+                                ))}
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="lm-an-grid2">
+                      <div
+                        className="lm-an-card lm-an-blur"
+                        style={{ animationDelay: "360ms" }}
+                      >
+                        <h3>Subject progress</h3>
+                        <p className="lm-an-hint">
+                          How far you have gotten in each subject.
+                        </p>
+                        {lmAnSubjects.length === 0 ? (
+                          <p className="lm-an-empty">
+                            Add a course and your subject progress
+                            will appear here.
+                          </p>
+                        ) : (
+                          lmAnSubjects.map((s) => (
+                            <div
+                              className="lm-an-bar-row"
+                              key={s.subject}
+                            >
+                              <span>{s.subject}</span>
+                              <div className="lm-an-bar">
+                                <i
+                                  style={{
+                                    width: `${s.pct * lmAnT}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="lm-an-pct">
+                                {Math.round(s.pct * lmAnT)}%
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <div
+                        className="lm-an-card lm-an-blur"
+                        style={{ animationDelay: "420ms" }}
+                      >
+                        <h3>Study this week</h3>
+                        <p className="lm-an-hint">
+                          Minutes studied each day this week.
+                        </p>
+                        <div className="lm-an-week">
+                          {lmAnWeekDays.map((d) => (
+                            <div className="lm-an-wcol" key={d.name}>
+                              <span className="lm-an-wmin">
+                                {Math.round(d.minutes * lmAnT)}
+                              </span>
+                              <div
+                                className={
+                                  d.isToday
+                                    ? "lm-an-wbar today"
+                                    : "lm-an-wbar"
+                                }
+                                style={{
+                                  height: `${Math.max(
+                                    3,
+                                    (d.minutes / lmAnWeekMax) *
+                                    84 *
+                                    lmAnT,
+                                  )}px`,
+                                }}
+                              />
+                              <span className="lm-an-wday">
+                                {d.name}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="lm-an-wtotal">
+                          {`Total: ${Math.round(lmAnWeekTotal * lmAnT)} min this week`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      className="lm-an-card lm-an-blur"
+                      style={{ animationDelay: "480ms" }}
+                    >
+                      <h3>Recent tests</h3>
+                      <p className="lm-an-hint">
+                        Your latest results, newest first.
+                      </p>
+                      {lmCompleted.length === 0 ? (
+                        <p className="lm-an-empty">
+                          No tests yet — your results will be listed
+                          here once you take one.
+                        </p>
+                      ) : (
+                        lmCompleted.slice(0, 5).map((a) => (
+                          <div className="lm-an-row" key={a.id}>
+                            <span>{a.chapterTitle}</span>
+                            <span className="lm-an-sec">
+                              {a.section ?? "—"}
+                            </span>
+                            <span>
+                              {new Date(
+                                a.completedAt,
+                              ).toLocaleDateString("en-IN", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </span>
+                            <span className="lm-an-score">
+                              {a.score}/{a.totalMarks}
+                            </span>
+                            <span
+                              className={
+                                a.passed
+                                  ? "lm-an-chip"
+                                  : "lm-an-chip fail"
+                              }
+                            >
+                              {a.passed ? "✓ Passed" : "Not passed"}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </>
                 )}
               </section>
@@ -7737,6 +8710,110 @@ export default function DashboardPage() {
                   disabled={courseDeleteLoading}
                 >
                   {courseDeleteLoading ? "Deleting..." : "Delete courses"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* OPEN-WINDOW TEST PROMPT */}
+
+        {lmOpenPromptItem && (
+          <div className="lm-open-prompt-scrim">
+            <div
+              className="lm-open-prompt-card"
+              role="alertdialog"
+              aria-modal="true"
+              aria-label={lmPromptHeading}
+            >
+              <p className="lm-open-prompt-title">
+                {lmPromptTyped}
+                {lmPromptTyped.length < lmPromptHeading.length && (
+                  <span className="type-cursor" aria-hidden="true">
+                    |
+                  </span>
+                )}
+              </p>
+
+              <p className="lm-open-prompt-sub">
+                {lmOpenPromptItem.section
+                  ? `${lmOpenPromptItem.section} · `
+                  : ""}
+                Scheduled for{" "}
+                {new Date(
+                  lmOpenPromptItem.scheduledAtISO,
+                ).toLocaleString()}
+                . You can start it until{" "}
+                {new Date(
+                  lmOpenPromptItem.windowEndsAtISO
+                    ? lmOpenPromptItem.windowEndsAtISO
+                    : new Date(
+                      lmOpenPromptItem.scheduledAtISO,
+                    ).getTime() +
+                    30 * 60 * 1000,
+                ).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+                .
+              </p>
+
+              <div className="lm-open-prompt-actions reveal">
+                <button
+                  type="button"
+                  className="btn-brown"
+                  onClick={lmPromptStart}
+                >
+                  Start test
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-cream"
+                  onClick={() => void lmPromptCancel()}
+                >
+                  Cancel test
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {lmRedoCourse && (
+          <div
+            className="lm-redo-scrim"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Redo this course"
+          >
+            <div className="lm-redo-card">
+              <h3>Redo this course?</h3>
+
+              <p>
+                You have already completed this course:{" "}
+                <b>{lmRedoCourse.title}</b>
+              </p>
+
+              <p>
+                Redoing it resets its progress to the beginning, so you can
+                go through it again. Your past test results stay saved.
+              </p>
+
+              <div className="lm-redo-actions">
+                <button
+                  type="button"
+                  className="btn-cream"
+                  onClick={() => setLmRedoCourse(null)}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-brown"
+                  onClick={() => void lmRedoConfirm()}
+                >
+                  Redo course
                 </button>
               </div>
             </div>
@@ -12540,6 +13617,304 @@ body{
   color:var(--cream-soft);
 }
 
+.lm-upcoming-pill.is-missed{
+  background:#FDECEA;
+  color:var(--red);
+}
+
+[data-theme="dark"] .lm .lm-upcoming-pill.is-missed{
+  background:#3A1512;
+  color:#F6B8B0;
+}
+
+.lm .btn-brown:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
+.lm .lm-msdd{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin:16px 0;
+  max-width:460px;
+}
+
+.lm .lm-msdd-label{
+  font-weight:700;
+  font-size:14px;
+  color:var(--text);
+}
+
+.lm .lm-msdd-wrap{position:relative}
+
+.lm .lm-msdd-btn{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  padding:12px 14px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--card);
+  color:var(--text);
+  font:inherit;
+  font-weight:600;
+  cursor:pointer;
+  box-shadow:var(--shadow);
+  transition:border-color .2s ease;
+}
+
+.lm .lm-msdd-btn:hover{border-color:var(--brown)}
+
+.lm .lm-msdd-btn-text{
+  flex:1;
+  text-align:left;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.lm .lm-msdd-btn-pct{
+  color:var(--brown);
+  font-weight:800;
+}
+
+[data-theme="dark"] .lm .lm-msdd-btn-pct{color:var(--cream)}
+
+.lm .lm-msdd-chevron{
+  transition:transform .25s ease;
+  color:var(--muted);
+}
+
+.lm .lm-msdd-chevron.open{transform:rotate(180deg)}
+
+.lm .lm-msdd-scrim{
+  position:fixed;
+  inset:0;
+  z-index:60;
+  background:transparent;
+  border:none;
+  cursor:default;
+}
+
+.lm .lm-msdd-list{
+  position:absolute;
+  top:calc(100% + 8px);
+  left:0;
+  right:0;
+  z-index:61;
+  list-style:none;
+  margin:0;
+  padding:6px;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:14px;
+  box-shadow:var(--shadow);
+  max-height:320px;
+  overflow-y:auto;
+  animation:fadeUp .22s ease;
+}
+
+.lm .lm-msdd-item{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  padding:10px 12px;
+  border:none;
+  border-radius:10px;
+  background:transparent;
+  color:var(--text);
+  font:inherit;
+  cursor:pointer;
+  text-align:left;
+}
+
+.lm .lm-msdd-item:hover{background:var(--card-2)}
+
+.lm .lm-msdd-item.selected{
+  background:var(--cream-soft);
+  font-weight:700;
+}
+
+[data-theme="dark"] .lm .lm-msdd-item.selected{background:var(--icon-bg)}
+
+.lm .lm-msdd-item-main{
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.lm .lm-msdd-item-bar{
+  flex:0 0 64px;
+  height:6px;
+  border-radius:999px;
+  background:var(--track);
+  overflow:hidden;
+}
+
+.lm .lm-msdd-item-bar i{
+  display:block;
+  height:100%;
+  background:var(--brown);
+  border-radius:999px;
+}
+
+.lm .lm-msdd-item-pct{
+  font-size:13px;
+  color:var(--text-2);
+  min-width:36px;
+  text-align:right;
+}
+
+@media(min-width:861px){
+  .lm .sidebar{transition:width .28s ease,padding .28s ease}
+  .lm .main{transition:margin-left .28s ease}
+  .lm .app.sidebar-collapsed .sidebar{width:78px;padding:18px 10px 14px}
+  .lm .app.sidebar-collapsed .main{margin-left:78px}
+  .lm .app.sidebar-collapsed .brand{justify-content:center;padding:4px 0 16px}
+  .lm .app.sidebar-collapsed .brand-mark{width:44px;height:44px}
+  .lm .app.sidebar-collapsed .brand-word{display:none}
+  .lm .app.sidebar-collapsed .nav-link{justify-content:center;padding:11px 0}
+  .lm .app.sidebar-collapsed .nav-label{display:none}
+  .lm .app.sidebar-collapsed .side-foot button,
+  .lm .app.sidebar-collapsed .profile-chip{justify-content:center;padding:11px 0}
+  .lm .app.sidebar-collapsed .side-foot-label{display:none}
+  .lm .app.sidebar-collapsed .profile-meta{display:none}
+  .lm .app.sidebar-collapsed .profile-chevron{display:none}
+  .lm .app.sidebar-collapsed .side-legal{display:none}
+}
+
+.lm .lm-edge-toggle{
+  position:fixed;
+  top:102px;
+  left:220px;
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  background:var(--brown);
+  border:2px solid var(--cream-soft);
+  color:var(--cream);
+  box-shadow:0 3px 12px rgba(61,34,15,.4);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  font-weight:800;
+  line-height:1;
+  padding:0 0 2px;
+  cursor:pointer;
+  z-index:55;
+  transition:left .28s ease,background .15s ease,transform .15s ease
+}
+.lm .lm-edge-toggle:hover{background:var(--brown-900);transform:scale(1.12)}
+.lm .app.sidebar-collapsed .lm-edge-toggle{left:62px}
+[data-theme="dark"] .lm .lm-edge-toggle{background:var(--cream);color:var(--brown-900);border-color:var(--brown)}
+@media (max-width:860px){
+  .lm .lm-edge-toggle{display:none}
+}
+
+.lm .lm-an-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.lm .lm-an-grid{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px}
+.lm .lm-an-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.lm .lm-an-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
+.lm .lm-an-card h3{font-size:15.5px;color:var(--brown-900);margin:0 0 2px}
+[data-theme="dark"] .lm .lm-an-card h3{color:var(--cream)}
+.lm .lm-an-hint{font-size:12.5px;color:var(--muted);margin:0 0 12px}
+.lm .lm-an-k{font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.lm .lm-an-v{font-size:27px;font-weight:800;color:var(--brown-900);margin:6px 0 3px}
+[data-theme="dark"] .lm .lm-an-v{color:var(--cream)}
+.lm .lm-an-v small{font-size:15px;font-weight:700;color:var(--text-2)}
+.lm .lm-an-d{font-size:12.5px;color:var(--text-2)}
+.lm .lm-an-blur{animation:lmAnBlur 1.25s ease-out both}
+@keyframes lmAnBlur{from{filter:blur(14px);opacity:.35;transform:translateY(10px)}to{filter:blur(0);opacity:1;transform:none}}
+.lm .lm-an-topic{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft);font-size:13.5px}
+.lm .lm-an-topic:last-child{border-bottom:none}
+.lm .lm-an-score{font-weight:800;color:var(--brown);white-space:nowrap}
+[data-theme="dark"] .lm .lm-an-score{color:var(--cream)}
+.lm .lm-an-lbl{font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin:12px 0 2px;color:var(--text-2)}
+.lm .lm-an-bar-row{display:grid;grid-template-columns:110px 1fr 44px;align-items:center;gap:10px;padding:7px 0;font-size:13.5px}
+.lm .lm-an-bar{height:10px;border-radius:99px;background:var(--track);overflow:hidden}
+.lm .lm-an-bar i{display:block;height:100%;border-radius:99px;background:var(--brown)}
+.lm .lm-an-pct{font-weight:800;color:var(--brown);text-align:right}
+[data-theme="dark"] .lm .lm-an-pct{color:var(--cream)}
+.lm .lm-an-week{display:flex;align-items:flex-end;gap:8px}
+.lm .lm-an-wcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px}
+.lm .lm-an-wbar{width:100%;max-width:38px;border-radius:7px 7px 3px 3px;background:#C89B5F}
+.lm .lm-an-wbar.today{background:var(--brown)}
+.lm .lm-an-wmin{font-size:11.5px;font-weight:800;color:var(--brown-900)}
+[data-theme="dark"] .lm .lm-an-wmin{color:var(--cream)}
+.lm .lm-an-wday{font-size:11.5px;font-weight:600;color:var(--text-2)}
+.lm .lm-an-wtotal{font-size:12.5px;color:var(--muted);margin:10px 0 0}
+.lm .lm-an-row{display:grid;grid-template-columns:1fr 90px 110px 60px 96px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border-soft);font-size:13.5px}
+.lm .lm-an-row:last-child{border-bottom:none}
+.lm .lm-an-chip{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700;background:var(--cream-soft);color:var(--brown);text-align:center}
+.lm .lm-an-chip.fail{background:#FDECEA;color:var(--red)}
+[data-theme="dark"] .lm .lm-an-chip{background:var(--icon-bg);color:var(--cream)}
+[data-theme="dark"] .lm .lm-an-chip.fail{background:#3A1512;color:#F6B8B0}
+.lm .lm-an-empty{font-size:13.5px;color:var(--muted);padding:10px 0;line-height:1.55;margin:0}
+@media (max-width:980px){
+  .lm .lm-an-stats{grid-template-columns:repeat(2,1fr)}
+  .lm .lm-an-grid,.lm .lm-an-grid2{grid-template-columns:1fr}
+  .lm .lm-an-row{grid-template-columns:1fr 70px 60px 96px}
+  .lm .lm-an-row .lm-an-sec{display:none}
+}
+
+.lm .lm-an-line{stroke:var(--brown)}
+[data-theme="dark"] .lm .lm-an-line{stroke:var(--cream)}
+.lm .lm-an-pt{fill:var(--card);stroke:var(--brown)}
+[data-theme="dark"] .lm .lm-an-pt{stroke:var(--cream)}
+.lm .lm-an-pt-label{fill:var(--brown-900)}
+[data-theme="dark"] .lm .lm-an-pt-label{fill:var(--cream)}
+[data-theme="dark"] .lm .lm-an-pass-label{fill:#F6B8B0}
+
+.lm-open-prompt-scrim{
+  position:fixed;
+  inset:0;
+  z-index:900;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  background:rgba(26,16,8,.55);
+  backdrop-filter:blur(3px);
+  animation:fadeIn .25s ease;
+}
+
+.lm-open-prompt-card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:20px;
+  box-shadow:var(--shadow);
+  width:100%;
+  max-width:440px;
+  padding:28px 24px;
+}
+
+.lm-open-prompt-title{
+  font-size:20px;
+  font-weight:800;
+  line-height:1.45;
+  color:var(--text);
+  min-height:58px;
+}
+
+.lm-open-prompt-sub{
+  margin-top:8px;
+  font-size:14px;
+  line-height:1.55;
+  color:var(--text-2);
+}
+
+.lm-open-prompt-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:22px;
+}
+
 .lm-upcoming-actions{
   display:flex;
   gap:10px;
@@ -12660,6 +14035,45 @@ body{
 [data-theme="dark"] .lm .lm-loading-brand{color:var(--cream)}
 .lm .lm-loading-message{margin-top:8px;font-size:15px;color:var(--text)}
 .lm .lm-loading-sub{margin-top:4px;font-size:13px;color:var(--muted)}
+.lm .lm-redo-scrim{position:fixed;inset:0;z-index:950;background:rgba(43,22,4,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px}
+.lm .lm-redo-card{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 60px rgba(43,22,4,.3);max-width:440px;width:100%;padding:26px}
+.lm .lm-redo-card h3{font-family:var(--font-display);font-size:24px;color:var(--ink);margin:0 0 8px}
+.lm .lm-redo-card p{color:var(--muted);font-size:14.5px;line-height:1.55;margin:0 0 6px}
+.lm .lm-redo-card p b{color:var(--ink)}
+.lm .lm-redo-actions{display:flex;gap:10px;margin-top:18px}
+.lm .lm-redo-actions .btn-brown,.lm .lm-redo-actions .btn-cream{flex:1;justify-content:center}
+.lm .lm-dn{position:relative;display:inline-block;margin:0 40px 0 44px;color:#fff;transform:scale(.78)}
+.lm .lm-dn-input{position:absolute;left:-99em}
+.lm .lm-dn-input:focus-visible + .lm-dn-toggle{outline:2px solid var(--cream);outline-offset:3px}
+.lm .lm-dn-toggle{cursor:pointer;display:inline-block;position:relative;width:90px;height:50px;background-color:#83d8ff;border-radius:84px;transition:background-color 200ms cubic-bezier(.445,.05,.55,.95)}
+.lm .lm-dn-toggle:before{content:"AM";position:absolute;left:-50px;top:15px;font-size:18px;color:#749ed7}
+.lm .lm-dn-toggle:after{content:"PM";position:absolute;right:-48px;top:15px;font-size:18px}
+.lm .lm-dn-handler{display:inline-block;position:relative;z-index:1;top:3px;left:3px;width:44px;height:44px;background-color:#ffcf96;border-radius:50px;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:all 400ms cubic-bezier(.68,-.55,.265,1.55);transform:rotate(-45deg)}
+.lm .lm-dn-crater{position:absolute;background-color:#e8cda5;opacity:0;transition:opacity 200ms ease-in-out;border-radius:100%}
+.lm .lm-dn-crater--1{top:18px;left:10px;width:4px;height:4px}
+.lm .lm-dn-crater--2{top:28px;left:22px;width:6px;height:6px}
+.lm .lm-dn-crater--3{top:10px;left:25px;width:8px;height:8px}
+.lm .lm-dn-star{position:absolute;background-color:#fff;transition:all 300ms cubic-bezier(.445,.05,.55,.95);border-radius:50%}
+.lm .lm-dn-star--1{top:10px;left:35px;z-index:0;width:30px;height:3px}
+.lm .lm-dn-star--2{top:18px;left:28px;z-index:1;width:30px;height:3px}
+.lm .lm-dn-star--3{top:27px;left:40px;z-index:0;width:30px;height:3px}
+.lm .lm-dn-star--4,.lm .lm-dn-star--5,.lm .lm-dn-star--6{opacity:0;transition:all 300ms 0 cubic-bezier(.445,.05,.55,.95)}
+.lm .lm-dn-star--4{top:16px;left:11px;z-index:0;width:2px;height:2px;transform:translate3d(3px,0,0)}
+.lm .lm-dn-star--5{top:32px;left:17px;z-index:0;width:3px;height:3px;transform:translate3d(3px,0,0)}
+.lm .lm-dn-star--6{top:36px;left:28px;z-index:0;width:2px;height:2px;transform:translate3d(3px,0,0)}
+.lm .lm-dn-input:checked + .lm-dn-toggle{background-color:#749dd6}
+.lm .lm-dn-input:checked + .lm-dn-toggle:before{color:#fff}
+.lm .lm-dn-input:checked + .lm-dn-toggle:after{color:#749ed7}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-handler{background-color:#ffe5b5;transform:translate3d(40px,0,0) rotate(0)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-handler .lm-dn-crater{opacity:1}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--1{width:2px;height:2px}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--2{width:4px;height:4px;transform:translate3d(-5px,0,0)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--3{width:2px;height:2px;transform:translate3d(-7px,0,0)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--4,.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--5,.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--6{opacity:1;transform:translate3d(0,0,0)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--4{transition:all 300ms 200ms cubic-bezier(.445,.05,.55,.95)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--5{transition:all 300ms 300ms cubic-bezier(.445,.05,.55,.95)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--6{transition:all 300ms 400ms cubic-bezier(.445,.05,.55,.95)}
+@media (max-width:700px){ .lm .lm-dn{transform:scale(.78);margin:0 30px 0 36px} }
 .lm .lesson-video{width:100%;height:100%;border:0;display:block}
 .lm .lm-home-tests{display:flex;flex-direction:column;gap:8px}
 .lm .lm-home-test{display:flex;justify-content:space-between;align-items:baseline;gap:12px;width:100%;text-align:left;background:var(--card-2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;color:var(--text);font:inherit}
@@ -12668,4 +14082,3 @@ body{
 .lm .lm-home-test-more{margin-top:8px;font-size:13px;color:var(--muted)}
 .lm .lm-lesson-watched{margin-top:8px;font-size:13px;color:var(--muted)}
 `;
-

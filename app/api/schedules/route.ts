@@ -74,7 +74,7 @@ export async function POST(req: Request) {
         user_id: userId,
         type: 'schedule',
         title: 'Test scheduled',
-        body: `Your test for ${ch?.title ?? 'this chapter'} has been scheduled for ${new Date(schedule.scheduled_at).toLocaleString()}.`,
+        body: `Your test for ${ch?.title ?? 'this chapter'} has been scheduled for ${new Date(schedule.scheduled_at).toLocaleString()}. You can start it within 30 minutes of that time.`,
         key: `schedule-created:${schedule.id}`,
         link: 'tests',
       });

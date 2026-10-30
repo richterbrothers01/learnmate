@@ -8,6 +8,8 @@ import {
 /**
  * GET /api/video-progress — the signed-in student's saved video progress.
  * POST /api/video-progress — record watch progress for one chapter.
+ * DELETE /api/video-progress — clear the saved progress for a list of
+ * chapter keys (used when a completed course is redone).
  * POST body: { chapterKey: string, watchedSeconds: number, durationSeconds: number }
  *
  * Progress is stored per chapter key (classLevel|subject|section|title) as
@@ -124,6 +126,55 @@ export async function POST(req: Request) {
       throw new ApiError(500, "DB_ERROR", "Failed to save video progress.");
     }
     return NextResponse.json({ progress: row });
+  } catch (err) {
+    const { status, body } = toErrorPayload(err);
+    return NextResponse.json(body, { status });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      throw new ApiError(400, "INVALID_JSON", "Request body must be valid JSON.");
+    }
+    const chapterKeys: string[] = Array.isArray(body?.chapterKeys)
+      ? body.chapterKeys.filter(
+          (k: unknown): k is string =>
+            typeof k === "string" && k.length > 0,
+        )
+      : [];
+    if (chapterKeys.length === 0) {
+      throw new ApiError(
+        400,
+        "INVALID_KEYS",
+        "chapterKeys must be a non-empty array of chapter keys.",
+      );
+    }
+    const client = await getServerClient();
+    const { data, error } = await client.auth.getUser();
+    if (error || !data?.user) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "UNAUTHENTICATED",
+            message: "Sign in to reset course progress.",
+          },
+        },
+        { status: 401 },
+      );
+    }
+    const { error: delError, count } = await client
+      .from("video_progress")
+      .delete({ count: "exact" })
+      .eq("user_id", data.user.id)
+      .in("chapter_key", chapterKeys);
+    if (delError) {
+      throw new ApiError(500, "DB_ERROR", "Failed to reset course progress.");
+    }
+    return NextResponse.json({ deleted: count ?? 0 });
   } catch (err) {
     const { status, body } = toErrorPayload(err);
     return NextResponse.json(body, { status });

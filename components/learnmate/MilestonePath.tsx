@@ -1,50 +1,43 @@
 'use client';
 
 /**
- * Mark 6 milestone path (LearnMate, Brief 2 + user decisions D1–D5).
+ * Milestone path (LearnMate) — updated 2026-10-29 at the user's request.
  *
- * One path per ONGOING course. Every milestone is ONE chapter, labelled with
- * its ACTUAL chapter title — never "Level 1" / "Stage 3". Incomplete does
- * NOT mean locked: there is no locking and no prerequisites anywhere here.
+ * One path per ONGOING course. Every milestone is ONE chapter, labelled
+ * with its ACTUAL chapter title — never "Level 1" / "Stage 3". Nothing
+ * is locked: every milestone can be opened at any time.
  *
- * Colour contract (user decision):
- *   completed  = bright warm yellow (not neon, not green)
- *   incomplete = muted, pale darker yellow
- * Status is never conveyed by colour alone — every milestone and the panel
- * carry an explicit text status ("Completed" / "Not completed yet").
+ * Highlight contract (user, 2026-10-29 — supersedes the old
+ * milestone_progress "completed" model): a milestone is HIGHLIGHTED
+ * when its chapter video has been watched (watch progress > 0, from
+ * the app's real video-progress data passed in as props), and not
+ * highlighted when it has not been watched. Status is never conveyed
+ * by colour alone — every milestone and the panel carry explicit text
+ * ("Watched 72%" / "Not watched yet").
  *
- * Iconography contract: the ONLY emoji used anywhere in this component is
- * 🎥, on the milestone nodes. No stars, trophies, chests, characters,
- * headphones, microphones, or any other icon/emoji.
+ * Colour contract: watched = bright warm yellow #F5B301; not watched
+ * = muted, pale darker yellow #D8C690.
  *
- * Video contract (user decision D4 — videos come LATER):
- *   Clicking "Watch Video" / "Rewatch Video" first calls resolveChapterVideo()
- *   (lib/resolveVideo.ts). TODAY that returns null for every chapter, so the
- *   panel shows "The video for this chapter has not been added yet." and
- *   onWatchVideo is NOT called: no navigation, nothing marked complete.
- *   When the user supplies YouTube URLs later, they go into resolveVideo.ts
- *   only, and the same button then calls onWatchVideo(chapterId), which the
- *   integrator wires to the app's EXISTING chapter-selection / video
- *   interface. This component never renders its own player and never
- *   invents, defaults, or hardcodes a video URL.
+ * Iconography contract: the ONLY emoji used anywhere in this
+ * component is 🎥, on the milestone nodes.
  *
- * Completion contract: `completed` comes from server data passed in as
- * props (e.g. milestone_progress). Watching a video NEVER marks a chapter
- * complete — this component holds no completion state at all, only UI
- * state (which panel is open, and the video-notice message).
+ * Panel contract (user, 2026-10-29 — supersedes the old in-flow
+ * single-button panel): clicking a milestone slides a glass panel in
+ * from the RIGHT. Watched chapter: "Rewatch this video" + "Cancel".
+ * Unwatched chapter: "Watch the video" + "Cancel". Cancel (or the
+ * scrim, or Escape, or clicking the milestone again) slides the panel
+ * back out to the right. The Watch button still goes through
+ * resolveChapterVideo(): no URL => an inline notice, no navigation —
+ * this component never invents a video URL and never renders a player;
+ * onWatchVideo is wired by the integrator to the app's existing
+ * chapter lesson interface.
  *
- * Panel contract: exactly ONE glassmorphism panel exists at a time, shown
- * for the selected milestone. It has exactly ONE button ("Watch Video" or
- * "Rewatch Video" — no substitutes, no competing primary buttons). Close
- * it by clicking the selected milestone again or pressing Escape; there is
- * deliberately no extra close button, so the panel keeps its single-button
- * rule. Glass styling (translucent + backdrop blur) is restricted to this
- * panel only.
+ * Scroll contract: this component creates NO scroll container of its
+ * own — the path flows with the dashboard page and the page's own
+ * scrollbar is the only one.
  *
- * Styling: ALL CSS lives in the <style> block below and is scoped under
- * `.learnmate-milestones`. No global styles are touched. Animation is a
- * restrained fade + small rise on mount, plus a subtle scroll parallax on
- * the decorative background layer only; both are fully disabled under
+ * Styling: ALL CSS lives in the <style> block below, scoped under
+ * `.learnmate-milestones`. Animations are disabled under
  * `prefers-reduced-motion`.
  */
 
@@ -54,7 +47,10 @@ import { resolveChapterVideo } from '../../lib/learnmate/resolveVideo';
 export interface MilestoneChapter {
   id: string;
   title: string;
-  completed: boolean;
+  /** True when the student has watched any of this chapter's video. */
+  watched: boolean;
+  /** Furthest watch position reached, 0–100. */
+  watchPercent: number;
 }
 
 export interface MilestonePathProps {
@@ -66,12 +62,12 @@ export interface MilestonePathProps {
   error?: string | null;
 }
 
-/** Cream-and-brown design language + the mandated milestone yellows. */
+/** Cream-and-brown design language + the milestone yellows. */
 export const MILESTONE_COLORS = {
-  /** Completed milestone: bright warm yellow (not neon, not green). */
+  /** Watched milestone: bright warm yellow (not neon, not green). */
   completed: '#F5B301',
   completedText: '#3B2314',
-  /** Incomplete milestone: muted, pale darker yellow. */
+  /** Not-watched milestone: muted, pale darker yellow. */
   incomplete: '#D8C690',
   incompleteBorder: '#B89B5E',
   cream: '#FDF8EE',
@@ -83,10 +79,8 @@ const CSS = `
 .learnmate-milestones * { box-sizing: border-box; }
 .learnmate-milestones {
   position: relative;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 24px 16px 48px;
-  overflow-x: hidden;
+  padding: 8px 0 48px;
+  overflow-x: clip;
   color: ${MILESTONE_COLORS.brown};
   font-family: inherit;
 }
@@ -105,7 +99,7 @@ const CSS = `
   width: 220px; height: 220px; top: 55%; left: -80px;
   background: radial-gradient(circle, #D8C69066 0%, transparent 70%);
 }
-.learnmate-milestones .lm-header { position: relative; text-align: center; }
+.learnmate-milestones .lm-header { position: relative; }
 .learnmate-milestones .lm-header h2 { margin: 0 0 6px; font-size: 1.5rem; }
 .learnmate-milestones .lm-progress { margin: 0; opacity: 0.75; }
 .learnmate-milestones .lm-state { position: relative; text-align: center; padding: 48px 16px; }
@@ -123,12 +117,15 @@ const CSS = `
 .learnmate-milestones .lm-item:nth-child(even) { margin-left: 50%; text-align: left; }
 .learnmate-milestones .lm-milestone {
   display: inline-flex; align-items: center; gap: 14px; width: 100%;
-  background: none; border: none; padding: 6px; cursor: pointer; color: inherit;
+  background: none; border: none; padding: 8px; cursor: pointer; color: inherit;
   font: inherit; text-align: inherit; border-radius: 14px;
+  transition: background 0.2s ease;
 }
+.learnmate-milestones .lm-milestone:hover { background: rgba(216, 198, 144, 0.18); }
 .learnmate-milestones .lm-item:nth-child(odd) .lm-milestone { flex-direction: row-reverse; }
 .learnmate-milestones .lm-milestone:focus-visible,
-.learnmate-milestones .lm-watch:focus-visible {
+.learnmate-milestones .lm-watch:focus-visible,
+.learnmate-milestones .lm-cancel:focus-visible {
   outline: 3px solid ${MILESTONE_COLORS.brown}; outline-offset: 4px;
 }
 .learnmate-milestones .lm-circle {
@@ -145,39 +142,74 @@ const CSS = `
   background: ${MILESTONE_COLORS.incomplete}; color: ${MILESTONE_COLORS.brown};
   border: 2px solid ${MILESTONE_COLORS.incompleteBorder};
 }
+.learnmate-milestones .lm-circle--selected {
+  box-shadow: 0 0 0 3px ${MILESTONE_COLORS.cream}, 0 0 0 6px ${MILESTONE_COLORS.brown};
+}
 .learnmate-milestones .lm-title { font-weight: 650; font-size: 1rem; line-height: 1.35; }
 .learnmate-milestones .lm-status { display: block; font-size: 0.85rem; opacity: 0.75; margin-top: 2px; }
-/* The ONE glassmorphism panel. Translucent, backdrop blur, low-opacity
-   brown border, soft shadow, rounded, NO blue tint. */
+/* The right slide-over panel (glass). Fixed to the viewport's right
+   edge; slides in on open and back out on close. */
+.learnmate-milestones .lm-panel-scrim {
+  position: fixed; inset: 0; z-index: 79; border: none; padding: 0;
+  background: rgba(26, 16, 8, 0.35); cursor: pointer;
+  animation: lm-fade-in 0.25s ease both;
+}
+.learnmate-milestones .lm-panel-scrim.is-closing { animation: lm-fade-out 0.3s ease both; }
 .learnmate-milestones .lm-panel {
-  position: relative; margin-top: 8px; padding: 22px;
-  background: rgba(255, 251, 240, 0.68);
+  position: fixed; top: 0; right: 0; z-index: 80;
+  width: min(360px, 92vw); height: 100dvh;
+  padding: 28px 24px; overflow: hidden;
+  background: rgba(255, 251, 240, 0.88);
   -webkit-backdrop-filter: blur(14px) saturate(1.25);
   backdrop-filter: blur(14px) saturate(1.25);
-  border: 1px solid rgba(92, 61, 46, 0.20);
-  border-radius: 18px;
-  box-shadow: 0 12px 32px rgba(59, 35, 20, 0.14);
+  border-left: 1px solid rgba(92, 61, 46, 0.20);
+  box-shadow: -16px 0 40px rgba(59, 35, 20, 0.18);
   text-align: left;
+  animation: lm-panel-in 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
+.learnmate-milestones .lm-panel.is-closing { animation: lm-panel-out 0.3s ease both; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .learnmate-milestones .lm-panel { background: ${MILESTONE_COLORS.cream}; }
 }
-.learnmate-milestones .lm-panel h3 { margin: 0 0 6px; font-size: 1.15rem; }
-.learnmate-milestones .lm-panel-status { margin: 0 0 16px; opacity: 0.8; }
+.learnmate-milestones .lm-panel h3 { margin: 0 0 6px; font-size: 1.2rem; line-height: 1.35; }
+.learnmate-milestones .lm-panel-status { margin: 0 0 16px; opacity: 0.85; line-height: 1.55; }
 .learnmate-milestones .lm-notice {
   margin: 0 0 16px; padding: 10px 12px; border-radius: 10px;
   background: rgba(216, 198, 144, 0.45); border: 1px solid rgba(92, 61, 46, 0.25);
 }
+.learnmate-milestones .lm-panel-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .learnmate-milestones .lm-watch {
   min-height: 48px; padding: 12px 22px; border: none; border-radius: 999px;
   background: ${MILESTONE_COLORS.brown}; color: ${MILESTONE_COLORS.cream};
   font: inherit; font-weight: 650; font-size: 1rem; cursor: pointer;
 }
 .learnmate-milestones .lm-watch:hover { background: #452C20; }
-.learnmate-milestones .lm-hint { margin: 14px 0 0; font-size: 0.85rem; opacity: 0.7; }
+.learnmate-milestones .lm-cancel {
+  min-height: 48px; padding: 12px 22px; border-radius: 999px;
+  background: transparent; color: ${MILESTONE_COLORS.brown};
+  border: 2px solid rgba(92, 61, 46, 0.45);
+  font: inherit; font-weight: 650; font-size: 1rem; cursor: pointer;
+}
+.learnmate-milestones .lm-cancel:hover { background: rgba(216, 198, 144, 0.25); }
 @keyframes lm-fade-rise {
   from { opacity: 0; transform: translateY(10px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes lm-panel-in {
+  from { transform: translateX(105%); }
+  to { transform: translateX(0); }
+}
+@keyframes lm-panel-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(105%); }
+}
+@keyframes lm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes lm-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 @media (max-width: 640px) {
   /* Mobile: single left-aligned path, winding line at the left, no overflow. */
@@ -192,8 +224,26 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) {
   .learnmate-milestones .lm-item { animation: none; }
   .learnmate-milestones .lm-milestone:hover .lm-circle { transform: none; }
+  .learnmate-milestones .lm-panel,
+  .learnmate-milestones .lm-panel.is-closing,
+  .learnmate-milestones .lm-panel-scrim,
+  .learnmate-milestones .lm-panel-scrim.is-closing { animation: none; }
+}
+/* Dashboard dark theme: keep the path and the glass panel readable. */
+[data-theme="dark"] .learnmate-milestones { color: #F6E8D0; }
+[data-theme="dark"] .learnmate-milestones .lm-panel {
+  background: rgba(34, 22, 9, 0.88);
+  border-left-color: rgba(233, 198, 137, 0.25);
+}
+[data-theme="dark"] .learnmate-milestones .lm-cancel {
+  color: #F6E8D0; border-color: rgba(233, 198, 137, 0.45);
+}
+[data-theme="dark"] .learnmate-milestones .lm-circle--selected {
+  box-shadow: 0 0 0 3px #221609, 0 0 0 6px #E9C689;
 }
 `;
+
+const PANEL_SLIDE_MS = 320;
 
 export default function MilestonePath({
   courseTitle,
@@ -203,24 +253,49 @@ export default function MilestonePath({
   error = null,
 }: MilestonePathProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
   const [videoNotice, setVideoNotice] = useState<string | null>(null);
   const decorRef = useRef<HTMLDivElement | null>(null);
+  const closeTimerRef = useRef<number | undefined>(undefined);
 
   const selected = chapters.find((c) => c.id === selectedId) ?? null;
-  const completedCount = chapters.filter((c) => c.completed).length;
+  const watchedCount = chapters.filter((c) => c.watched).length;
 
-  // Escape closes the panel. No close button exists by design (single-button rule).
+  const closePanel = () => {
+    if (!selectedId || closing) return;
+    setClosing(true);
+    closeTimerRef.current = window.setTimeout(() => {
+      setSelectedId(null);
+      setClosing(false);
+      setVideoNotice(null);
+    }, PANEL_SLIDE_MS);
+  };
+
+  // If the chapter list changes (another course picked) while the
+  // panel is open, drop a selection that no longer exists.
+  useEffect(() => {
+    if (selectedId && !chapters.some((c) => c.id === selectedId)) {
+      window.clearTimeout(closeTimerRef.current);
+      setSelectedId(null);
+      setClosing(false);
+      setVideoNotice(null);
+    }
+  }, [chapters, selectedId]);
+
+  useEffect(() => {
+    return () => window.clearTimeout(closeTimerRef.current);
+  }, []);
+
+  // Escape slides the panel away.
   useEffect(() => {
     if (!selectedId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setSelectedId(null);
-        setVideoNotice(null);
-      }
+      if (e.key === 'Escape') closePanel();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, closing]);
 
   // Subtle scroll parallax on the decorative layer only. Skipped entirely
   // under prefers-reduced-motion; never moves content or milestones.
@@ -243,20 +318,28 @@ export default function MilestonePath({
   }, []);
 
   const handleMilestoneClick = (id: string) => {
+    if (closing) return;
+    if (id === selectedId) {
+      closePanel();
+      return;
+    }
     setVideoNotice(null);
-    setSelectedId((prev) => (prev === id ? null : id));
+    setSelectedId(id);
   };
 
   const handleWatch = () => {
     if (!selected) return;
-    // D4 gate: no video source yet => show the message, do NOT navigate,
-    // do NOT mark anything complete. onWatchVideo is only called when a
-    // real video URL resolves for THIS chapter.
+    // Gate: no video source for this chapter => show the message and
+    // do NOT navigate. onWatchVideo is only called when a real video
+    // URL resolves for THIS chapter.
     const videoUrl = resolveChapterVideo(selected.id);
     if (!videoUrl) {
       setVideoNotice('The video for this chapter has not been added yet.');
       return;
     }
+    window.clearTimeout(closeTimerRef.current);
+    setSelectedId(null);
+    setClosing(false);
     onWatchVideo(selected.id);
   };
 
@@ -269,7 +352,7 @@ export default function MilestonePath({
         <h2>{courseTitle}</h2>
         {!loading && !error && chapters.length > 0 && (
           <p className="lm-progress">
-            {completedCount} of {chapters.length} chapters completed
+            {watchedCount} of {chapters.length} videos watched
           </p>
         )}
       </div>
@@ -297,7 +380,9 @@ export default function MilestonePath({
         <ol className="lm-path">
           {chapters.map((chapter, index) => {
             const isSelected = chapter.id === selectedId;
-            const statusText = chapter.completed ? 'Completed' : 'Not completed yet';
+            const statusText = chapter.watched
+              ? `Watched ${chapter.watchPercent}%`
+              : 'Not watched yet';
             return (
               <li key={chapter.id} className="lm-item">
                 <button
@@ -310,7 +395,10 @@ export default function MilestonePath({
                 >
                   <span
                     className={
-                      chapter.completed ? 'lm-circle lm-circle--done' : 'lm-circle lm-circle--todo'
+                      (chapter.watched
+                        ? 'lm-circle lm-circle--done'
+                        : 'lm-circle lm-circle--todo') +
+                      (isSelected ? ' lm-circle--selected' : '')
                     }
                     aria-hidden="true"
                   >
@@ -328,21 +416,42 @@ export default function MilestonePath({
       )}
 
       {!loading && !error && selected && (
-        <div className="lm-panel" role="region" aria-label={`Details for ${selected.title}`}>
-          <h3>{selected.title}</h3>
-          <p className="lm-panel-status">
-            Status: {selected.completed ? 'Completed' : 'Not completed yet'}
-          </p>
-          {videoNotice && (
-            <p className="lm-notice" role="status">
-              {videoNotice}
+        <>
+          <button
+            type="button"
+            aria-label="Cancel"
+            className={
+              closing ? 'lm-panel-scrim is-closing' : 'lm-panel-scrim'
+            }
+            onClick={closePanel}
+          />
+          <div
+            className={closing ? 'lm-panel is-closing' : 'lm-panel'}
+            role="dialog"
+            aria-modal="false"
+            aria-label={`Details for ${selected.title}`}
+          >
+            <h3>{selected.title}</h3>
+            <p className="lm-panel-status">
+              {selected.watched
+                ? `You have watched ${selected.watchPercent}% of this video.`
+                : 'You have not watched this video yet.'}
             </p>
-          )}
-          <button type="button" className="lm-watch" onClick={handleWatch}>
-            {selected.completed ? 'Rewatch Video' : 'Watch Video'}
-          </button>
-          <p className="lm-hint">Select the milestone again or press Escape to close this panel.</p>
-        </div>
+            {videoNotice && (
+              <p className="lm-notice" role="status">
+                {videoNotice}
+              </p>
+            )}
+            <div className="lm-panel-actions">
+              <button type="button" className="lm-watch" onClick={handleWatch}>
+                {selected.watched ? 'Rewatch this video' : 'Watch the video'}
+              </button>
+              <button type="button" className="lm-cancel" onClick={closePanel}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </section>
   );

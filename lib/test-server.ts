@@ -188,12 +188,52 @@ function isWellFormedQuestion(q: any): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Expiry rule: a schedule expires when its scheduled CALENDAR DATE has
- * passed (UTC). A test scheduled for a date may therefore be taken any
- * time up to 23:59:59 UTC on that date, and not after. UTC is used because
- * scheduled_at is timestamptz and the server has no per-student timezone
- * in this module; if the product stores a student timezone, replace the
- * UTC day boundary here with that timezone's day boundary (one place).
+ * Start-window rule: a scheduled test opens AT its scheduled time and
+ * can be started for SCHEDULE_START_WINDOW_MS (30 minutes) after it.
+ * Before the time it is too early; after the window it is missed.
+ * All comparisons use the scheduled_at instant (timestamptz): the
+ * client sends a local date/time converted to a UTC instant, so the
+ * window is exact in the student's own timezone.
+ */
+export const SCHEDULE_START_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * Extra time after the window closes during which a test that was
+ * started inside the window may still be submitted: the test's own
+ * duration plus this buffer for a slow connection.
+ */
+export const SCHEDULE_SUBMIT_BUFFER_MS = 5 * 60 * 1000;
+
+export function scheduleWindowEnd(scheduledAt: string): number {
+  return new Date(scheduledAt).getTime() + SCHEDULE_START_WINDOW_MS;
+}
+
+/** True once the 30-minute start window has fully closed. */
+export function isScheduleWindowPassed(
+  scheduledAt: string,
+  now: Date = new Date(),
+): boolean {
+  const end = scheduleWindowEnd(scheduledAt);
+  if (Number.isNaN(end)) return true; // unparseable date: fail closed
+  return now.getTime() > end;
+}
+
+/** Human-readable instant for error messages (server-local rendering). */
+export function fmtScheduleTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'the scheduled time';
+  return d.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/**
+ * Legacy day-boundary helper, kept for compatibility. The live rules
+ * use the start window above, not the calendar date.
  */
 export function isScheduleDatePassed(scheduledAt: string, now: Date = new Date()): boolean {
   const d = new Date(scheduledAt);
@@ -235,18 +275,16 @@ export async function getLatestSchedule(
 }
 
 /**
- * Enforces D5 at test start AND submit time.
+ * Enforces the start window at test START time (questions fetch).
  * - No schedule, or latest schedule completed/cancelled: allowed (the
  *   test is open; scheduling is opt-in, not a prerequisite).
- * - Latest schedule active (scheduled/available) and its date has passed:
- *   refused (SCHEDULE_EXPIRED).
  * - Latest schedule missed: refused (SCHEDULE_MISSED). The student must
  *   create a new schedule, which then becomes the latest and re-opens
- *   the chapter. This is what makes "if the date is gone you can't do
- *   the test" actually hold: without this branch, a student who missed
- *   a schedule could simply take the test unscheduled the next day.
- * If the product instead wants missed schedules to leave the test open,
- * delete the 'missed' branch below — that is the only change needed.
+ *   the chapter.
+ * - Latest schedule active and now is before the scheduled time:
+ *   refused (SCHEDULE_TOO_EARLY).
+ * - Latest schedule active and the 30-minute window has closed:
+ *   refused (SCHEDULE_WINDOW_CLOSED) — the test is missed.
  */
 export async function assertScheduleAllowsStart(
   client: DbClient,
@@ -258,17 +296,67 @@ export async function assertScheduleAllowsStart(
   if (schedule.status === 'missed') {
     throw forbidden(
       'SCHEDULE_MISSED',
-      'This test was scheduled and the date has passed. Schedule it again to take it.',
+      'You missed this test — its start window has closed. Schedule it again to take it.',
     );
   }
-  if (
-    (schedule.status === 'scheduled' || schedule.status === 'available') &&
-    isScheduleDatePassed(schedule.scheduled_at)
-  ) {
+  if (schedule.status === 'scheduled' || schedule.status === 'available') {
+    const start = new Date(schedule.scheduled_at).getTime();
+    const now = Date.now();
+    if (Number.isNaN(start) || now > start + SCHEDULE_START_WINDOW_MS) {
+      throw forbidden(
+        'SCHEDULE_WINDOW_CLOSED',
+        `You missed this test. It could be started until ${fmtScheduleTime(
+          new Date(start + SCHEDULE_START_WINDOW_MS).toISOString(),
+        )}. Schedule it again to take it.`,
+      );
+    }
+    if (now < start) {
+      throw forbidden(
+        'SCHEDULE_TOO_EARLY',
+        `This test has not started yet. It opens at ${fmtScheduleTime(
+          schedule.scheduled_at,
+        )} and can be started for 30 minutes after that.`,
+      );
+    }
+  }
+}
+
+/**
+ * The submit-time counterpart. A test legitimately started inside its
+ * window runs for its full duration, which ends AFTER the window
+ * closes, so submit must not re-apply the start window. It refuses
+ * only when the schedule is missed, or when now is past
+ * window-end + test duration + a small buffer (a forged or abandoned
+ * submission, never a real in-progress one: the in-page timer
+ * auto-submits at zero).
+ */
+export async function assertScheduleAllowsSubmit(
+  client: DbClient,
+  userId: string,
+  templateChapterId: string,
+  durationMinutes: number,
+): Promise<void> {
+  const schedule = await getLatestSchedule(client, userId, templateChapterId);
+  if (!schedule) return;
+  if (schedule.status === 'missed') {
     throw forbidden(
-      'SCHEDULE_EXPIRED',
-      'The scheduled date for this test has passed. Schedule it again to take it.',
+      'SCHEDULE_MISSED',
+      'You missed this test — its start window has closed. Schedule it again to take it.',
     );
+  }
+  if (schedule.status === 'scheduled' || schedule.status === 'available') {
+    const start = new Date(schedule.scheduled_at).getTime();
+    const deadline =
+      start +
+      SCHEDULE_START_WINDOW_MS +
+      Math.max(0, durationMinutes) * 60 * 1000 +
+      SCHEDULE_SUBMIT_BUFFER_MS;
+    if (Number.isNaN(start) || Date.now() > deadline) {
+      throw forbidden(
+        'SCHEDULE_EXPIRED',
+        'The time for this scheduled test has fully passed, so it can no longer be submitted.',
+      );
+    }
   }
 }
 
@@ -632,7 +720,12 @@ export async function submitTest(
 
   const test = await getTestById(client, testId);
   if (test.template_chapter_id) {
-    await assertScheduleAllowsStart(client, userId, test.template_chapter_id);
+    await assertScheduleAllowsSubmit(
+      client,
+      userId,
+      test.template_chapter_id,
+      test.duration_minutes,
+    );
   }
   const key = await loadTestKey(test.id);
   const keyIds = new Set(key.map((k) => k.questionId));
@@ -1023,8 +1116,10 @@ export async function submitQuiz(
 
 export interface ScheduleWithChapter extends ScheduleRow {
   chapter: { id: string; title: string; chapter_number: number; section: string | null } | null;
-  /** True when the scheduled date has passed but the row is not yet flipped. */
+  /** True when the 30-minute start window has closed but the row is not yet flipped to missed. */
   isExpired: boolean;
+  /** ISO instant when the 30-minute start window closes. */
+  windowEndsAt: string;
 }
 
 export async function createSchedule(
@@ -1048,6 +1143,20 @@ export async function createSchedule(
     .maybeSingle();
   if (chapterError) throw dbError('Failed to load chapter.');
   if (!chapter) throw notFound('CHAPTER_NOT_FOUND', 'No chapter with that id exists.');
+  // A schedule whose start window has closed must not block a new
+  // one: flip this student's expired rows for this chapter to
+  // 'missed' first, so "schedule it again" always works after a miss.
+  const windowCutoff = new Date(
+    Date.now() - SCHEDULE_START_WINDOW_MS,
+  ).toISOString();
+  const { error: expireError } = await client
+    .from('scheduled_tests')
+    .update({ status: 'missed', updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('template_chapter_id', templateChapterId)
+    .in('status', ['scheduled', 'available'])
+    .lt('scheduled_at', windowCutoff);
+  if (expireError) throw dbError('Failed to clear expired schedules.');
   const { data: active, error: activeError } = await client
     .from('scheduled_tests')
     .select('id')
@@ -1103,6 +1212,7 @@ export async function listSchedules(
     const ch = Array.isArray(row.curriculum_template_chapters)
       ? row.curriculum_template_chapters[0]
       : row.curriculum_template_chapters;
+    const endMs = scheduleWindowEnd(row.scheduled_at);
     return {
       id: row.id,
       user_id: row.user_id,
@@ -1122,7 +1232,10 @@ export async function listSchedules(
         : null,
       isExpired:
         (row.status === 'scheduled' || row.status === 'available') &&
-        isScheduleDatePassed(row.scheduled_at),
+        isScheduleWindowPassed(row.scheduled_at),
+      windowEndsAt: Number.isNaN(endMs)
+        ? row.scheduled_at
+        : new Date(endMs).toISOString(),
     };
   });
 }
@@ -1130,9 +1243,9 @@ export async function listSchedules(
 /**
  * Cancels a schedule. Only the owning student may cancel, only while the
  * schedule is still active (scheduled/available), and only before its
- * date has passed. A completed, missed, or already-cancelled schedule
+ * start window closes. A completed, missed, or already-cancelled schedule
  * cannot be cancelled. (Per D3 there is no server-visible "started but
- * not submitted" state, so "before start" is enforced via status + date.)
+ * not submitted" state, so "before start" is enforced via status + window.)
  */
 export async function cancelSchedule(
   client: DbClient,
@@ -1157,10 +1270,10 @@ export async function cancelSchedule(
       `A ${data.status} schedule cannot be cancelled.`,
     );
   }
-  if (isScheduleDatePassed(data.scheduled_at)) {
+  if (isScheduleWindowPassed(data.scheduled_at)) {
     throw conflict(
       'SCHEDULE_EXPIRED',
-      'The scheduled date has passed, so this schedule can no longer be cancelled. Schedule the test again instead.',
+      'The start window for this test has passed, so it can no longer be cancelled. It counts as missed — schedule it again instead.',
     );
   }
   const { data: updated, error: updateError } = await client
@@ -1185,8 +1298,11 @@ export async function markExpiredSchedules(
   client: DbClient,
   now: Date = new Date(),
 ): Promise<{ updated: number }> {
+  // Flip only once the start window AND a full test duration (plus
+  // buffer) have passed, so a test started inside its window is never
+  // flipped to missed while it is still being taken.
   const threshold = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    now.getTime() - (SCHEDULE_START_WINDOW_MS + 35 * 60 * 1000),
   ).toISOString();
   const { data, error } = await client
     .from('scheduled_tests')

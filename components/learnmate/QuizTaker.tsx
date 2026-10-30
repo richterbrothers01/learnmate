@@ -379,8 +379,9 @@ export default function QuizTaker({
               <button
                 type="button"
                 className={i === currentIndex ? "btn-brown" : "btn-cream"}
-                aria-label={`Question ${i + 1}: ${answers[q.id] !== undefined ? "answered" : "not answered"
-                  }`}
+                aria-label={`Question ${i + 1}: ${
+                  answers[q.id] !== undefined ? "answered" : "not answered"
+                }`}
                 aria-current={i === currentIndex ? "true" : undefined}
                 onClick={() => setCurrentIndex(i)}
               >

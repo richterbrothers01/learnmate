@@ -1071,11 +1071,6 @@ export default function DashboardPage() {
   const [aiGlowLive, setAiGlowLive] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  // Doubt Clearer is gated on every visit; the existing AI workspace
-  // remains untouched and is only mounted after the correct password.
-  const [aiUnlocked, setAiUnlocked] = useState(false);
-  const [aiGatePassword, setAiGatePassword] = useState("");
-
   const [aiCompact, setAiCompact] = useState(false);
   const [aiHistoryCollapsed, setAiHistoryCollapsed] = useState(false);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
@@ -1967,9 +1962,19 @@ export default function DashboardPage() {
   ========================================================== */
 
   useEffect(() => {
-    const periodOf = (d: Date) =>
-      `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours() < 12 ? "AM" : "PM"
-      }`;
+    const periodOf = (d: Date) => {
+      // Theme windows: dark 12:00 AM-3:59 AM, light 4:00 AM-11:59 PM.
+      // The window key must change at both boundaries (midnight and
+      // 4 AM) so a manual toggle holds only until the next boundary.
+      // Hours 0-3 belong to the window that began the previous day.
+      const day = new Date(
+        d.getFullYear(),
+        d.getMonth(),
+        d.getDate() - (d.getHours() < 4 ? 1 : 0),
+      );
+
+      return `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+    };
 
     const applyTimeTheme = () => {
       const now = new Date();
@@ -1982,7 +1987,7 @@ export default function DashboardPage() {
 
       if (themeManualRef.current) return;
 
-      setTheme(now.getHours() >= 12 ? "dark" : "light");
+      setTheme(now.getHours() < 4 ? "dark" : "light");
     };
 
     applyTimeTheme();
@@ -2350,10 +2355,6 @@ export default function DashboardPage() {
 
   const handleLogout = async () => {
     setAccountActionLoading(true);
-
-    // Never carry the private Doubt Clearer unlock into another session.
-    setAiUnlocked(false);
-    setAiGatePassword("");
 
     try {
       const { error } =
@@ -3897,8 +3898,6 @@ export default function DashboardPage() {
     }
 
     if (label === "Doubt Clearer") {
-      setAiUnlocked(false);
-      setAiGatePassword("");
       setActiveSection("ai");
       setAddOpen(false);
       setAddClosing(false);
@@ -4638,27 +4637,7 @@ export default function DashboardPage() {
     }
   };
 
-  /* ---- Password gate + chat history actions ---- */
-
-  const aiUnlockDoubtClearer = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (aiGatePassword === "d1m0n2702") {
-      setAiUnlocked(true);
-      setAiGatePassword("");
-      showToast("Doubt Clearer unlocked.", "success");
-      return;
-    }
-
-    setAiGatePassword("");
-    showToast("Incorrect password. Please try again.", "error");
-  };
-
-  const aiBackFromGate = () => {
-    setAiUnlocked(false);
-    setAiGatePassword("");
-    setActiveSection("dashboard");
-    sessionStorage.setItem("learnmate-active-section", "dashboard");
-  };
+  /* ---- Chat history actions ---- */
 
   const aiRenameChat = async (chat: AiChatSummary) => {
     const proposed = window.prompt("Rename this conversation", chat.title);
@@ -4928,19 +4907,14 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Load history each time the student opens Doubt Clearer. The
-  // password gate unlocks AFTER the section is already active, so the
-  // load must also fire when aiUnlocked flips to true — with
-  // [activeSection] alone, unlocking never retriggered it and the
-  // previous chats only appeared after the first sent message
-  // refreshed the list as a side effect.
+  // Load history each time the student opens Doubt Clearer.
   useEffect(() => {
-    if (activeSection !== "ai" || !aiUnlocked) return;
+    if (activeSection !== "ai") return;
 
     void aiLoadChats();
     aiFocusComposer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection, aiUnlocked]);
+  }, [activeSection]);
 
   // Keep the glow animating until its fade-out has finished.
   useEffect(() => {
@@ -5697,69 +5671,7 @@ export default function DashboardPage() {
                 MARK 5 — LEARNMATE AI (DOUBT CLEARER)
             ================================================== */}
 
-            {activeSection === "ai" && !aiUnlocked && (
-              <section className="ai-password-stage" aria-label="Doubt Clearer password">
-                <div className="ai-gate-orb ai-gate-orb--one" aria-hidden="true" />
-                <div className="ai-gate-orb ai-gate-orb--two" aria-hidden="true" />
-                <div
-                  className="ai-gate-scene"
-                  onMouseMove={(event) => {
-                    if (aiReducedMotion || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const x = (event.clientX - rect.left) / rect.width - 0.5;
-                    const y = (event.clientY - rect.top) / rect.height - 0.5;
-                    const card = event.currentTarget.querySelector<HTMLElement>(".ai-password-card");
-                    if (card) card.style.transform = `perspective(1200px) rotateX(${(-y * 5).toFixed(2)}deg) rotateY(${(x * 7).toFixed(2)}deg) translateY(-2px)`;
-                    const glow = event.currentTarget.querySelector<HTMLElement>(".ai-gate-light");
-                    if (glow) {
-                      glow.style.left = `${event.clientX - rect.left}px`;
-                      glow.style.top = `${event.clientY - rect.top}px`;
-                    }
-                  }}
-                  onMouseLeave={(event) => {
-                    const card = event.currentTarget.querySelector<HTMLElement>(".ai-password-card");
-                    if (card) card.style.transform = "perspective(1200px) rotateX(0deg) rotateY(0deg) translateY(0)";
-                  }}
-                >
-                  <div className="ai-gate-light" aria-hidden="true" />
-                  <form className="ai-password-card" onSubmit={aiUnlockDoubtClearer}>
-                    <div className="ai-gate-mark" aria-hidden="true">
-                      <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="6.5" y="13" width="19" height="14" rx="4" />
-                        <path d="M10.5 13V9.5a5.5 5.5 0 0 1 11 0V13" />
-                        <circle cx="16" cy="19.5" r="1.5" />
-                        <path d="M16 21v2" />
-                      </svg>
-                    </div>
-                    <p className="ai-gate-eyebrow">LEARNMATE · PRIVATE SPACE</p>
-                    <h1 className="ai-gate-title">Doubt Clearer</h1>
-                    <p className="ai-gate-description">Enter your password to continue.</p>
-                    <label className="ai-gate-label" htmlFor="ai-gate-password">Password</label>
-                    <input
-                      id="ai-gate-password"
-                      className="ai-gate-input"
-                      type="password"
-                      value={aiGatePassword}
-                      onChange={(event) => setAiGatePassword(event.target.value)}
-                      placeholder="Enter password"
-                      autoComplete="current-password"
-                      autoFocus
-                      spellCheck={false}
-                    />
-                    <button className="ai-gate-submit" type="submit">
-                      <span>Continue</span><span aria-hidden="true">→</span>
-                    </button>
-                    <button className="ai-gate-back" type="button" onClick={aiBackFromGate}>
-                      <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" /><path d="M7.5 10H17" /></svg>
-                      <span>Back to dashboard</span>
-                    </button>
-                    <p className="ai-gate-footnote">Your learning space is waiting.</p>
-                  </form>
-                </div>
-              </section>
-            )}
-
-            {activeSection === "ai" && aiUnlocked && (
+            {activeSection === "ai" && (
               <section
                 className={`ai-workspace${aiHistoryVisible && !aiCompact ? " has-history" : ""
                   }`}
@@ -6353,7 +6265,7 @@ export default function DashboardPage() {
                     >
                       <div className="courses-section-head">
                         <div>
-                          <h2>{courseTab === "ongoing" ? "Ongoing" : "Completed"}</h2>
+                          <h2>{courseTab === "ongoing" ? " Ongoing" : " Completed"}</h2>
                           <p>
                             {courseTab === "ongoing"
                               ? "Courses you are currently learning"
@@ -14042,38 +13954,38 @@ body{
 .lm .lm-redo-card p b{color:var(--ink)}
 .lm .lm-redo-actions{display:flex;gap:10px;margin-top:18px}
 .lm .lm-redo-actions .btn-brown,.lm .lm-redo-actions .btn-cream{flex:1;justify-content:center}
-.lm .lm-dn{position:relative;display:inline-block;margin:0 40px 0 44px;color:#fff;transform:scale(.78)}
+.lm .lm-dn{position:relative;display:inline-block;margin:0 40px 0 44px;color:#fff}
 .lm .lm-dn-input{position:absolute;left:-99em}
 .lm .lm-dn-input:focus-visible + .lm-dn-toggle{outline:2px solid var(--cream);outline-offset:3px}
-.lm .lm-dn-toggle{cursor:pointer;display:inline-block;position:relative;width:90px;height:50px;background-color:#83d8ff;border-radius:84px;transition:background-color 200ms cubic-bezier(.445,.05,.55,.95)}
-.lm .lm-dn-toggle:before{content:"AM";position:absolute;left:-50px;top:15px;font-size:18px;color:#749ed7}
-.lm .lm-dn-toggle:after{content:"PM";position:absolute;right:-48px;top:15px;font-size:18px}
-.lm .lm-dn-handler{display:inline-block;position:relative;z-index:1;top:3px;left:3px;width:44px;height:44px;background-color:#ffcf96;border-radius:50px;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:all 400ms cubic-bezier(.68,-.55,.265,1.55);transform:rotate(-45deg)}
+.lm .lm-dn-toggle{cursor:pointer;display:inline-block;position:relative;width:56px;height:32px;background-color:#83d8ff;border-radius:84px;transition:background-color 200ms cubic-bezier(.445,.05,.55,.95)}
+.lm .lm-dn-toggle:before{content:"AM";position:absolute;left:-36px;top:10px;font-size:12px;color:#749ed7}
+.lm .lm-dn-toggle:after{content:"PM";position:absolute;right:-34px;top:10px;font-size:12px}
+.lm .lm-dn-handler{display:inline-block;position:relative;z-index:1;top:2.5px;left:2.5px;width:27px;height:27px;background-color:#ffcf96;border-radius:50px;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:all 400ms cubic-bezier(.68,-.55,.265,1.55);transform:rotate(-45deg)}
 .lm .lm-dn-crater{position:absolute;background-color:#e8cda5;opacity:0;transition:opacity 200ms ease-in-out;border-radius:100%}
-.lm .lm-dn-crater--1{top:18px;left:10px;width:4px;height:4px}
-.lm .lm-dn-crater--2{top:28px;left:22px;width:6px;height:6px}
-.lm .lm-dn-crater--3{top:10px;left:25px;width:8px;height:8px}
+.lm .lm-dn-crater--1{top:11px;left:6px;width:2.5px;height:2.5px}
+.lm .lm-dn-crater--2{top:17px;left:14px;width:4px;height:4px}
+.lm .lm-dn-crater--3{top:6px;left:15px;width:5px;height:5px}
 .lm .lm-dn-star{position:absolute;background-color:#fff;transition:all 300ms cubic-bezier(.445,.05,.55,.95);border-radius:50%}
-.lm .lm-dn-star--1{top:10px;left:35px;z-index:0;width:30px;height:3px}
-.lm .lm-dn-star--2{top:18px;left:28px;z-index:1;width:30px;height:3px}
-.lm .lm-dn-star--3{top:27px;left:40px;z-index:0;width:30px;height:3px}
+.lm .lm-dn-star--1{top:6px;left:22px;z-index:0;width:19px;height:2px}
+.lm .lm-dn-star--2{top:12px;left:17px;z-index:1;width:19px;height:2px}
+.lm .lm-dn-star--3{top:17px;left:25px;z-index:0;width:19px;height:2px}
 .lm .lm-dn-star--4,.lm .lm-dn-star--5,.lm .lm-dn-star--6{opacity:0;transition:all 300ms 0 cubic-bezier(.445,.05,.55,.95)}
-.lm .lm-dn-star--4{top:16px;left:11px;z-index:0;width:2px;height:2px;transform:translate3d(3px,0,0)}
-.lm .lm-dn-star--5{top:32px;left:17px;z-index:0;width:3px;height:3px;transform:translate3d(3px,0,0)}
-.lm .lm-dn-star--6{top:36px;left:28px;z-index:0;width:2px;height:2px;transform:translate3d(3px,0,0)}
+.lm .lm-dn-star--4{top:10px;left:7px;z-index:0;width:2px;height:2px;transform:translate3d(2px,0,0)}
+.lm .lm-dn-star--5{top:20px;left:11px;z-index:0;width:2px;height:2px;transform:translate3d(2px,0,0)}
+.lm .lm-dn-star--6{top:23px;left:17px;z-index:0;width:2px;height:2px;transform:translate3d(2px,0,0)}
 .lm .lm-dn-input:checked + .lm-dn-toggle{background-color:#749dd6}
 .lm .lm-dn-input:checked + .lm-dn-toggle:before{color:#fff}
 .lm .lm-dn-input:checked + .lm-dn-toggle:after{color:#749ed7}
-.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-handler{background-color:#ffe5b5;transform:translate3d(40px,0,0) rotate(0)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-handler{background-color:#ffe5b5;transform:translate3d(24px,0,0) rotate(0)}
 .lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-handler .lm-dn-crater{opacity:1}
 .lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--1{width:2px;height:2px}
-.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--2{width:4px;height:4px;transform:translate3d(-5px,0,0)}
-.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--3{width:2px;height:2px;transform:translate3d(-7px,0,0)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--2{width:4px;height:4px;transform:translate3d(-3px,0,0)}
+.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--3{width:2px;height:2px;transform:translate3d(-4px,0,0)}
 .lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--4,.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--5,.lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--6{opacity:1;transform:translate3d(0,0,0)}
 .lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--4{transition:all 300ms 200ms cubic-bezier(.445,.05,.55,.95)}
 .lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--5{transition:all 300ms 300ms cubic-bezier(.445,.05,.55,.95)}
 .lm .lm-dn-input:checked + .lm-dn-toggle .lm-dn-star--6{transition:all 300ms 400ms cubic-bezier(.445,.05,.55,.95)}
-@media (max-width:700px){ .lm .lm-dn{transform:scale(.78);margin:0 30px 0 36px} }
+@media (max-width:700px){ .lm .lm-dn{margin:0 30px 0 34px} }
 .lm .lesson-video{width:100%;height:100%;border:0;display:block}
 .lm .lm-home-tests{display:flex;flex-direction:column;gap:8px}
 .lm .lm-home-test{display:flex;justify-content:space-between;align-items:baseline;gap:12px;width:100%;text-align:left;background:var(--card-2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;color:var(--text);font:inherit}
@@ -14081,4 +13993,8 @@ body{
 .lm .lm-home-test-date{color:var(--muted);font-size:13px;white-space:nowrap}
 .lm .lm-home-test-more{margin-top:8px;font-size:13px;color:var(--muted)}
 .lm .lm-lesson-watched{margin-top:8px;font-size:13px;color:var(--muted)}
+.lm .courses-section-head h2{clip-path:none;-webkit-clip-path:none;mask:none;-webkit-mask:none;transform:none;filter:none;overflow:visible;padding-left:.07em;margin-left:-.07em}
+.lm .courses-section-head h2::first-letter{font-family:inherit;font-size:inherit;font-weight:inherit;font-style:normal;float:none;margin:0;padding:0;line-height:inherit;color:inherit;background:none;-webkit-text-fill-color:currentColor}
+.lm .courses-section-head{padding:18px 26px 0}
 `;
+

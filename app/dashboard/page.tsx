@@ -26,6 +26,7 @@ import type { Schedule as LmSchedule } from "../../components/learnmate/Schedule
 import MilestonePath from "../../components/learnmate/MilestonePath";
 import TestTypeSelect from "../../components/learnmate/TestTypeSelect";
 import { resolveChapterVideo } from "../../lib/learnmate/resolveVideo";
+import { cleanAiMathText } from "../../lib/ai-text";
 import LessonVideo from "../../components/learnmate/LessonVideo";
 import { usePushSubscription } from "../../lib/learnmate/usePushSubscription";
 
@@ -683,7 +684,7 @@ function renderAiInline(text: string, keyPrefix: string): ReactNode[] {
 }
 
 function renderAiMarkdown(source: string): ReactNode[] {
-  const lines = source.replace(/\r\n?/g, "\n").split("\n");
+  const lines = cleanAiMathText(source).split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
   let counter = 0;
@@ -13993,8 +13994,7 @@ body{
 .lm .lm-home-test-date{color:var(--muted);font-size:13px;white-space:nowrap}
 .lm .lm-home-test-more{margin-top:8px;font-size:13px;color:var(--muted)}
 .lm .lm-lesson-watched{margin-top:8px;font-size:13px;color:var(--muted)}
-.lm .courses-section-head h2{clip-path:none;-webkit-clip-path:none;mask:none;-webkit-mask:none;transform:none;filter:none;overflow:visible;padding-left:.07em;margin-left:-.07em}
+.lm .courses-section-head h2{clip-path:none;-webkit-clip-path:none;mask:none;-webkit-mask:none;transform:none;filter:none;overflow:visible}
 .lm .courses-section-head h2::first-letter{font-family:inherit;font-size:inherit;font-weight:inherit;font-style:normal;float:none;margin:0;padding:0;line-height:inherit;color:inherit;background:none;-webkit-text-fill-color:currentColor}
-.lm .courses-section-head{padding:18px 26px 0}
 `;
 

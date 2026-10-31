@@ -4,6 +4,8 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { cleanAiMathText } from "../../../lib/ai-text";
+
 export const runtime = "nodejs";
 
 async function getSupabase() {
@@ -174,7 +176,11 @@ export async function POST(request: Request) {
                     "Explain concepts clearly using age-appropriate language. " +
                     "Use step-by-step explanations and examples when useful. " +
                     "Be supportive, accurate, and concise. " +
-                    "Do not invent textbook page numbers or sources.",
+                    "Do not invent textbook page numbers or sources. " +
+                    "Write all maths in plain text, never in LaTeX: do not use dollar-sign notation ($...$ or $$...$$), " +
+                    "backslash commands such as \\frac, \\sqrt or \\times, or curly-brace grouping. " +
+                    "Write fractions as a/b, roots with the √ symbol, powers with superscript digits (x², 10³), " +
+                    "and use real symbols where needed (×, ÷, π, θ, ≤, ≥, ≠, ≈, ±, →) so the answer reads cleanly on screen.",
             },
             contents: [
                 ...history,
@@ -182,9 +188,10 @@ export async function POST(request: Request) {
             ],
         });
 
-        const answer =
+        const answer = cleanAiMathText(
             response.text ||
-            "I couldn't generate an answer. Please try again.";
+                "I couldn't generate an answer. Please try again."
+        );
 
         const { error: saveAnswerError } = await supabase
             .from("ai_chat_messages")
